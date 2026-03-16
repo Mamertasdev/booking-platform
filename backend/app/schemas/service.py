@@ -9,6 +9,11 @@ class ServiceCreate(BaseModel):
     duration_minutes: int
     price: int
 
+class ServiceUpdate(BaseModel):
+    name: str
+    duration_minutes: int
+    price: int
+    is_active: bool
 
 class ServiceResponse(BaseModel):
     id: int
