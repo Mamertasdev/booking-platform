@@ -1,10 +1,21 @@
 from fastapi import FastAPI
+from app.core.settings import settings
+from app.database.init_db import init_db
+from app.api.business import router as business_router
+from app.api.specialist import router as specialist_router
 
 app = FastAPI(
-    title="Booking Platform API",
+    title=settings.APP_NAME,
     version="0.1"
 )
 
+@app.on_event("startup")
+def startup():
+    init_db()
+
+app.include_router(business_router, prefix="/api")
+app.include_router(specialist_router, prefix="/api")
+
 @app.get("/")
 def root():
-    return {"status": "running"}
+    return {"status": "running", "app": settings.APP_NAME}
