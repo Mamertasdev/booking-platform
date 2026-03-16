@@ -4,6 +4,7 @@ from app.models.specialist import Specialist
 from app.models.service import Service
 from app.models.appointment import Appointment
 from app.models.working_hour import WorkingHour
+from app.models.availability_exception import AvailabilityException
 
 
 def init_db():
