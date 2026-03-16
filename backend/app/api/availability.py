@@ -11,14 +11,6 @@ from app.schemas.appointment import (
     AppointmentResponse,
     AppointmentUpdateStatus,
 )
-from app.services.availability import (
-    filter_slots_by_appointments,
-    filter_slots_by_exceptions,
-    generate_time_slots,
-    get_appointments_for_day,
-    get_exceptions_for_day,
-    get_working_hours_for_day,
-)
 
 router = APIRouter()
 
@@ -66,63 +58,6 @@ def create_appointment(payload: AppointmentCreate, db: Session = Depends(get_db)
 
     if not service:
         raise HTTPException(status_code=404, detail="Service not found")
-
-    target_date = payload.appointment_start.date()
-
-    working_hours = get_working_hours_for_day(
-        db=db,
-        business_id=payload.business_id,
-        specialist_id=payload.specialist_id,
-        target_date=target_date,
-    )
-
-    exceptions = get_exceptions_for_day(
-        db=db,
-        business_id=payload.business_id,
-        specialist_id=payload.specialist_id,
-        target_date=target_date,
-    )
-
-    appointments = get_appointments_for_day(
-        db=db,
-        business_id=payload.business_id,
-        specialist_id=payload.specialist_id,
-        target_date=target_date,
-    )
-
-    slots = []
-
-    for item in working_hours:
-        slots.extend(
-            generate_time_slots(
-                start_time=item.start_time,
-                end_time=item.end_time,
-                duration_minutes=service.duration_minutes,
-            )
-        )
-
-    slots = filter_slots_by_exceptions(
-        target_date=target_date,
-        slots=slots,
-        exceptions=exceptions,
-    )
-
-    slots = filter_slots_by_appointments(
-        target_date=target_date,
-        slots=slots,
-        appointments=appointments,
-    )
-
-    slot_exists = any(
-        slot["start_time"] == payload.appointment_start.time()
-        for slot in slots
-    )
-
-    if not slot_exists:
-        raise HTTPException(
-            status_code=400,
-            detail="Selected time slot is not available",
-        )
 
     appointment_end = payload.appointment_start + timedelta(minutes=service.duration_minutes)
 

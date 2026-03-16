@@ -7,6 +7,7 @@ from app.api.service import router as service_router
 from app.api.appointment import router as appointment_router
 from app.api.working_hour import router as working_hour_router
 from app.api.availability_exception import router as availability_exception_router
+from app.api.availability import router as availability_router
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -23,6 +24,7 @@ app.include_router(service_router, prefix="/api")
 app.include_router(appointment_router, prefix="/api")
 app.include_router(working_hour_router, prefix="/api")
 app.include_router(availability_exception_router, prefix="/api")
+app.include_router(availability_router, prefix="/api")
 
 @app.get("/")
 def root():
