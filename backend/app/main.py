@@ -3,6 +3,7 @@ from app.core.settings import settings
 from app.database.init_db import init_db
 from app.api.business import router as business_router
 from app.api.specialist import router as specialist_router
+from app.api.service import router as service_router
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -15,6 +16,7 @@ def startup():
 
 app.include_router(business_router, prefix="/api")
 app.include_router(specialist_router, prefix="/api")
+app.include_router(service_router, prefix="/api")
 
 @app.get("/")
 def root():

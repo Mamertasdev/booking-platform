@@ -1,6 +1,7 @@
 from app.database.database import Base, SessionLocal, engine
 from app.models.business import Business
 from app.models.specialist import Specialist
+from app.models.service import Service
 
 
 def init_db():
