@@ -12,10 +12,11 @@ class AppointmentCreate(BaseModel):
     client_phone: str | None = None
     notes: str | None = None
     appointment_start: datetime
-    appointment_end: datetime
+
 
 class AppointmentUpdateStatus(BaseModel):
     status: str
+
 
 class AppointmentResponse(BaseModel):
     id: int

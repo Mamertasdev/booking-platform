@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { use, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 type FormErrors = {
@@ -74,8 +74,9 @@ function formatDateLabel(dateString: string | null) {
 export default function BookingPage({
   params,
 }: {
-  params: { id: string; serviceId: string };
+  params: Promise<{ id: string; serviceId: string }>;
 }) {
+  const resolvedParams = use(params);
   const searchParams = useSearchParams();
 
   const date = searchParams.get("date");
@@ -130,8 +131,8 @@ export default function BookingPage({
         },
         body: JSON.stringify({
           business_id: 1,
-          specialist_id: Number(params.id),
-          service_id: Number(params.serviceId),
+          specialist_id: Number(resolvedParams.id),
+          service_id: Number(resolvedParams.serviceId),
           client_full_name: name.trim(),
           client_email: email.trim(),
           client_phone: phone.trim(),
@@ -177,9 +178,7 @@ export default function BookingPage({
 
             <h2 style={successTitleStyle}>Rezervacija sėkminga!</h2>
 
-            <p style={successTextStyle}>
-              Jūsų vizitas užregistruotas.
-            </p>
+            <p style={successTextStyle}>Jūsų vizitas užregistruotas.</p>
 
             <div style={summaryCardStyle}>
               <div style={summaryRowStyle}>
