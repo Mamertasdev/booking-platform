@@ -31,6 +31,14 @@ function addDays(dateString: string, daysToAdd: number) {
   return date.toISOString().split("T")[0];
 }
 
+function getTodayString() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export default async function ServiceTimesPage({
   params,
   searchParams,
@@ -42,14 +50,18 @@ export default async function ServiceTimesPage({
   const resolvedSearchParams = await searchParams;
 
   const businessId = 1;
-  const targetDate = resolvedSearchParams.date ?? "2026-03-17";
+  const todayString = getTodayString();
+  const requestedDate = resolvedSearchParams.date ?? todayString;
+  const targetDate = requestedDate < todayString ? todayString : requestedDate;
 
   const availability: AvailabilityResponse = await fetchAPI(
     `/public/availability?business_id=${businessId}&specialist_id=${id}&service_id=${serviceId}&target_date=${targetDate}`
   );
 
-  const previousDate = addDays(targetDate, -1);
+  const rawPreviousDate = addDays(targetDate, -1);
+  const previousDate = rawPreviousDate < todayString ? todayString : rawPreviousDate;
   const nextDate = addDays(targetDate, 1);
+  const canGoBack = targetDate > todayString;
 
   return (
     <main
@@ -140,22 +152,38 @@ export default async function ServiceTimesPage({
             marginBottom: "20px",
           }}
         >
-          <Link
-            href={`/specialists/${id}/services/${serviceId}/times?date=${previousDate}`}
-            style={{
-              display: "block",
-              padding: "12px",
-              backgroundColor: "#ffffff",
-              borderRadius: "12px",
-              textDecoration: "none",
-              color: "#111",
-              textAlign: "center",
-              boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-              fontWeight: 600,
-            }}
-          >
-            ← Ankstesnė
-          </Link>
+          {canGoBack ? (
+            <Link
+              href={`/specialists/${id}/services/${serviceId}/times?date=${previousDate}`}
+              style={{
+                display: "block",
+                padding: "12px",
+                backgroundColor: "#ffffff",
+                borderRadius: "12px",
+                textDecoration: "none",
+                color: "#111",
+                textAlign: "center",
+                boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+                fontWeight: 600,
+              }}
+            >
+              ← Ankstesnė
+            </Link>
+          ) : (
+            <div
+              style={{
+                display: "block",
+                padding: "12px",
+                backgroundColor: "#e5e5e5",
+                borderRadius: "12px",
+                color: "#9a9a9a",
+                textAlign: "center",
+                fontWeight: 600,
+              }}
+            >
+              ← Ankstesnė
+            </div>
+          )}
 
           <Link
             href={`/specialists/${id}/services/${serviceId}/times?date=${nextDate}`}

@@ -71,6 +71,18 @@ function buildMonthCalendar(dateString: string): CalendarDay[] {
   return calendarDays;
 }
 
+function getTodayString() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function isPastDate(dateString: string, todayString: string) {
+  return dateString < todayString;
+}
+
 async function getAvailabilityForDate(
   businessId: number,
   specialistId: string,
@@ -93,7 +105,9 @@ export default async function ServiceCalendarPage({
   const resolvedSearchParams = await searchParams;
 
   const businessId = 1;
-  const targetDate = resolvedSearchParams.date ?? "2026-03-17";
+  const todayString = getTodayString();
+  const requestedDate = resolvedSearchParams.date ?? todayString;
+  const targetDate = requestedDate < todayString ? todayString : requestedDate;
 
   const monthDays = buildMonthCalendar(targetDate);
 
@@ -196,6 +210,7 @@ export default async function ServiceCalendarPage({
               const availability = monthAvailabilityMap.get(day.date);
               const hasSlots = (availability?.slots?.length ?? 0) > 0;
               const isSelected = day.date === targetDate;
+              const isPast = isPastDate(day.date, todayString);
 
               const baseStyle: React.CSSProperties = {
                 minHeight: "44px",
@@ -215,6 +230,21 @@ export default async function ServiceCalendarPage({
                       ...baseStyle,
                       backgroundColor: "#f0f0f0",
                       color: "#bbb",
+                    }}
+                  >
+                    {day.dayNumber}
+                  </div>
+                );
+              }
+
+              if (isPast) {
+                return (
+                  <div
+                    key={day.date}
+                    style={{
+                      ...baseStyle,
+                      backgroundColor: "#e5e5e5",
+                      color: "#9a9a9a",
                     }}
                   >
                     {day.dayNumber}
