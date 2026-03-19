@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.services.availability import (
+    filter_past_slots_for_today,
     filter_slots_by_appointments,
     filter_slots_by_exceptions,
     generate_time_slots,
@@ -74,6 +75,11 @@ def get_public_availability(
         target_date=target_date,
         slots=slots,
         appointments=appointments,
+    )
+
+    slots = filter_past_slots_for_today(
+        target_date=target_date,
+        slots=slots,
     )
 
     return {

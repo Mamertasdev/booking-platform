@@ -1,102 +1,129 @@
-from datetime import timedelta
+from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
-from app.models.appointment import Appointment
-from app.models.service import Service
-from app.schemas.appointment import (
-    AppointmentCreate,
-    AppointmentResponse,
-    AppointmentUpdateStatus,
+from app.services.availability import (
+    filter_past_slots_for_today,
+    filter_slots_by_appointments,
+    filter_slots_by_exceptions,
+    generate_time_slots,
+    get_appointments_for_day,
+    get_exceptions_for_day,
+    get_service_duration_minutes,
+    get_weekday,
+    get_working_hours_for_day,
 )
 
 router = APIRouter()
 
 
-@router.get("/appointments", response_model=list[AppointmentResponse])
-def get_appointments(
-    business_id: int | None = Query(default=None),
-    specialist_id: int | None = Query(default=None),
-    db: Session = Depends(get_db)
+@router.get("/availability")
+def get_availability(
+    business_id: int = Query(...),
+    specialist_id: int = Query(...),
+    service_id: int = Query(...),
+    target_date: date = Query(...),
+    db: Session = Depends(get_db),
 ):
-    query = db.query(Appointment)
+    weekday = get_weekday(target_date)
 
-    if business_id is not None:
-        query = query.filter(Appointment.business_id == business_id)
-
-    if specialist_id is not None:
-        query = query.filter(Appointment.specialist_id == specialist_id)
-
-    return query.all()
-
-
-@router.get("/appointments/{appointment_id}", response_model=AppointmentResponse)
-def get_appointment(appointment_id: int, db: Session = Depends(get_db)):
-    appointment = (
-        db.query(Appointment)
-        .filter(Appointment.id == appointment_id)
-        .first()
+    working_hours = get_working_hours_for_day(
+        db=db,
+        business_id=business_id,
+        specialist_id=specialist_id,
+        target_date=target_date,
     )
 
-    if not appointment:
-        raise HTTPException(status_code=404, detail="Appointment not found")
-
-    return appointment
-
-
-@router.post("/appointments", response_model=AppointmentResponse)
-def create_appointment(payload: AppointmentCreate, db: Session = Depends(get_db)):
-    service = (
-        db.query(Service)
-        .filter(Service.id == payload.service_id)
-        .filter(Service.business_id == payload.business_id)
-        .filter(Service.is_active == True)
-        .first()
+    exceptions = get_exceptions_for_day(
+        db=db,
+        business_id=business_id,
+        specialist_id=specialist_id,
+        target_date=target_date,
     )
 
-    if not service:
-        raise HTTPException(status_code=404, detail="Service not found")
-
-    appointment_end = payload.appointment_start + timedelta(minutes=service.duration_minutes)
-
-    appointment = Appointment(
-        business_id=payload.business_id,
-        specialist_id=payload.specialist_id,
-        service_id=payload.service_id,
-        client_full_name=payload.client_full_name,
-        client_email=payload.client_email,
-        client_phone=payload.client_phone,
-        notes=payload.notes,
-        appointment_start=payload.appointment_start,
-        appointment_end=appointment_end,
-        status="confirmed",
-        is_active=True,
-    )
-    db.add(appointment)
-    db.commit()
-    db.refresh(appointment)
-    return appointment
-
-
-@router.put("/appointments/{appointment_id}/status", response_model=AppointmentResponse)
-def update_appointment_status(
-    appointment_id: int,
-    payload: AppointmentUpdateStatus,
-    db: Session = Depends(get_db)
-):
-    appointment = (
-        db.query(Appointment)
-        .filter(Appointment.id == appointment_id)
-        .first()
+    appointments = get_appointments_for_day(
+        db=db,
+        business_id=business_id,
+        specialist_id=specialist_id,
+        target_date=target_date,
     )
 
-    if not appointment:
-        raise HTTPException(status_code=404, detail="Appointment not found")
+    service_duration_minutes = get_service_duration_minutes(
+        db=db,
+        business_id=business_id,
+        service_id=service_id,
+    )
 
-    appointment.status = payload.status
+    slots = []
 
-    db.commit()
-    db.refresh(appointment)
-    return appointment
+    if service_duration_minutes:
+        for item in working_hours:
+            slots.extend(
+                generate_time_slots(
+                    start_time=item.start_time,
+                    end_time=item.end_time,
+                    duration_minutes=service_duration_minutes,
+                )
+            )
+
+    slots = filter_slots_by_exceptions(
+        target_date=target_date,
+        slots=slots,
+        exceptions=exceptions,
+    )
+
+    slots = filter_slots_by_appointments(
+        target_date=target_date,
+        slots=slots,
+        appointments=appointments,
+    )
+
+    slots = filter_past_slots_for_today(
+        target_date=target_date,
+        slots=slots,
+    )
+
+    return {
+        "business_id": business_id,
+        "specialist_id": specialist_id,
+        "service_id": service_id,
+        "target_date": str(target_date),
+        "weekday": weekday,
+        "service_duration_minutes": service_duration_minutes,
+        "working_hours": [
+            {
+                "id": item.id,
+                "start_time": str(item.start_time),
+                "end_time": str(item.end_time),
+            }
+            for item in working_hours
+        ],
+        "exceptions": [
+            {
+                "id": item.id,
+                "start_datetime": item.start_datetime.isoformat(),
+                "end_datetime": item.end_datetime.isoformat(),
+                "reason": item.reason,
+            }
+            for item in exceptions
+        ],
+        "appointments": [
+            {
+                "id": item.id,
+                "appointment_start": item.appointment_start.isoformat(),
+                "appointment_end": item.appointment_end.isoformat(),
+                "status": item.status,
+                "client_full_name": item.client_full_name,
+            }
+            for item in appointments
+        ],
+        "slots": [
+            {
+                "start_time": str(item["start_time"]),
+                "end_time": str(item["end_time"]),
+            }
+            for item in slots
+        ],
+    }

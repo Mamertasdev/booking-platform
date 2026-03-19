@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
@@ -124,7 +125,24 @@ def create_appointment(payload: AppointmentCreate, db: Session = Depends(get_db)
             detail="Selected time slot is not available",
         )
 
-    appointment_end = payload.appointment_start + timedelta(minutes=service.duration_minutes)
+    existing_appointment = (
+        db.query(Appointment)
+        .filter(Appointment.business_id == payload.business_id)
+        .filter(Appointment.specialist_id == payload.specialist_id)
+        .filter(Appointment.appointment_start == payload.appointment_start)
+        .filter(Appointment.is_active == True)
+        .first()
+    )
+
+    if existing_appointment:
+        raise HTTPException(
+            status_code=400,
+            detail="Selected time slot is no longer available",
+        )
+
+    appointment_end = payload.appointment_start + timedelta(
+        minutes=service.duration_minutes
+    )
 
     appointment = Appointment(
         business_id=payload.business_id,
@@ -139,10 +157,18 @@ def create_appointment(payload: AppointmentCreate, db: Session = Depends(get_db)
         status="confirmed",
         is_active=True,
     )
-    db.add(appointment)
-    db.commit()
-    db.refresh(appointment)
-    return appointment
+
+    try:
+        db.add(appointment)
+        db.commit()
+        db.refresh(appointment)
+        return appointment
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Selected time slot is no longer available",
+        )
 
 
 @router.put("/appointments/{appointment_id}/status", response_model=AppointmentResponse)

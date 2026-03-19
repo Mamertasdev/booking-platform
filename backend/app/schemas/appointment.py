@@ -1,6 +1,5 @@
 from datetime import datetime
-
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, field_validator
 
 
 class AppointmentCreate(BaseModel):
@@ -8,10 +7,55 @@ class AppointmentCreate(BaseModel):
     specialist_id: int
     service_id: int
     client_full_name: str
-    client_email: str
+    client_email: EmailStr
     client_phone: str | None = None
     notes: str | None = None
     appointment_start: datetime
+
+    @field_validator("client_full_name")
+    @classmethod
+    def validate_name(cls, v: str):
+        v = v.strip()
+        if len(v) < 2:
+            raise ValueError("Name too short")
+        if len(v) > 100:
+            raise ValueError("Name too long")
+        return v
+
+    @field_validator("client_phone")
+    @classmethod
+    def validate_phone(cls, v: str | None):
+        if not v:
+            return v
+
+        v = v.strip()
+
+        if len(v) < 8 or len(v) > 20:
+            raise ValueError("Invalid phone number length")
+
+        if not all(c.isdigit() or c in "+-() " for c in v):
+            raise ValueError("Invalid phone number format")
+
+        return v
+
+    @field_validator("notes")
+    @classmethod
+    def validate_notes(cls, v: str | None):
+        if not v:
+            return v
+
+        if len(v) > 500:
+            raise ValueError("Notes too long")
+
+        return v
+
+    @field_validator("appointment_start")
+    @classmethod
+    def validate_appointment_start(cls, v: datetime):
+        now = datetime.now()
+        if v < now:
+            raise ValueError("Appointment time cannot be in the past")
+        return v
 
 
 class AppointmentUpdateStatus(BaseModel):

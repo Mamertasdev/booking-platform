@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.sql import func
 
 from app.database.base import Base
@@ -6,6 +6,14 @@ from app.database.base import Base
 
 class Appointment(Base):
     __tablename__ = "appointments"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "specialist_id",
+            "appointment_start",
+            name="uq_specialist_appointment_start",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
 

@@ -183,3 +183,21 @@ def filter_slots_by_appointments(
             filtered_slots.append(slot)
 
     return filtered_slots
+
+
+def filter_past_slots_for_today(
+    target_date: date,
+    slots: list[dict],
+):
+    today = datetime.now().date()
+
+    if target_date != today:
+        return slots
+
+    now_time = datetime.now().time()
+
+    return [
+        slot
+        for slot in slots
+        if slot["start_time"] > now_time
+    ]
