@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import date, datetime, time, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
@@ -9,10 +9,12 @@ from app.models.appointment import Appointment
 from app.models.service import Service
 from app.schemas.appointment import (
     AppointmentCreate,
+    AppointmentReschedule,
     AppointmentResponse,
     AppointmentUpdateStatus,
 )
 from app.services.availability import (
+    filter_past_slots_for_today,
     filter_slots_by_appointments,
     filter_slots_by_exceptions,
     generate_time_slots,
@@ -28,9 +30,10 @@ router = APIRouter()
 def get_appointments(
     business_id: int | None = Query(default=None),
     specialist_id: int | None = Query(default=None),
+    target_date: date | None = Query(default=None),
     db: Session = Depends(get_db)
 ):
-    query = db.query(Appointment)
+    query = db.query(Appointment).filter(Appointment.is_active == True)
 
     if business_id is not None:
         query = query.filter(Appointment.business_id == business_id)
@@ -38,7 +41,14 @@ def get_appointments(
     if specialist_id is not None:
         query = query.filter(Appointment.specialist_id == specialist_id)
 
-    return query.all()
+    if target_date is not None:
+        day_start = datetime.combine(target_date, time.min)
+        day_end = datetime.combine(target_date, time.max)
+
+        query = query.filter(Appointment.appointment_start >= day_start)
+        query = query.filter(Appointment.appointment_start <= day_end)
+
+    return query.order_by(Appointment.appointment_start.asc()).all()
 
 
 @router.get("/appointments/{appointment_id}", response_model=AppointmentResponse)
@@ -112,6 +122,11 @@ def create_appointment(payload: AppointmentCreate, db: Session = Depends(get_db)
         target_date=target_date,
         slots=slots,
         appointments=appointments,
+    )
+
+    slots = filter_past_slots_for_today(
+        target_date=target_date,
+        slots=slots,
     )
 
     slot_exists = any(
@@ -191,3 +206,150 @@ def update_appointment_status(
     db.commit()
     db.refresh(appointment)
     return appointment
+
+
+@router.put("/appointments/{appointment_id}/cancel", response_model=AppointmentResponse)
+def cancel_appointment(
+    appointment_id: int,
+    db: Session = Depends(get_db)
+):
+    appointment = (
+        db.query(Appointment)
+        .filter(Appointment.id == appointment_id)
+        .first()
+    )
+
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    appointment.status = "cancelled_by_admin"
+    appointment.is_active = False
+
+    db.commit()
+    db.refresh(appointment)
+    return appointment
+
+
+@router.put("/appointments/{appointment_id}/reschedule", response_model=AppointmentResponse)
+def reschedule_appointment(
+    appointment_id: int,
+    payload: AppointmentReschedule,
+    db: Session = Depends(get_db)
+):
+    appointment = (
+        db.query(Appointment)
+        .filter(Appointment.id == appointment_id)
+        .first()
+    )
+
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    service = (
+        db.query(Service)
+        .filter(Service.id == appointment.service_id)
+        .filter(Service.business_id == appointment.business_id)
+        .filter(Service.is_active == True)
+        .first()
+    )
+
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
+
+    target_date = payload.appointment_start.date()
+
+    working_hours = get_working_hours_for_day(
+        db=db,
+        business_id=appointment.business_id,
+        specialist_id=appointment.specialist_id,
+        target_date=target_date,
+    )
+
+    exceptions = get_exceptions_for_day(
+        db=db,
+        business_id=appointment.business_id,
+        specialist_id=appointment.specialist_id,
+        target_date=target_date,
+    )
+
+    appointments = get_appointments_for_day(
+        db=db,
+        business_id=appointment.business_id,
+        specialist_id=appointment.specialist_id,
+        target_date=target_date,
+    )
+
+    appointments = [item for item in appointments if item.id != appointment.id]
+
+    slots = []
+
+    for item in working_hours:
+        slots.extend(
+            generate_time_slots(
+                start_time=item.start_time,
+                end_time=item.end_time,
+                duration_minutes=service.duration_minutes,
+            )
+        )
+
+    slots = filter_slots_by_exceptions(
+        target_date=target_date,
+        slots=slots,
+        exceptions=exceptions,
+    )
+
+    slots = filter_slots_by_appointments(
+        target_date=target_date,
+        slots=slots,
+        appointments=appointments,
+    )
+
+    slots = filter_past_slots_for_today(
+        target_date=target_date,
+        slots=slots,
+    )
+
+    slot_exists = any(
+        slot["start_time"] == payload.appointment_start.time()
+        for slot in slots
+    )
+
+    if not slot_exists:
+        raise HTTPException(
+            status_code=400,
+            detail="Selected new time slot is not available",
+        )
+
+    existing_appointment = (
+        db.query(Appointment)
+        .filter(Appointment.business_id == appointment.business_id)
+        .filter(Appointment.specialist_id == appointment.specialist_id)
+        .filter(Appointment.appointment_start == payload.appointment_start)
+        .filter(Appointment.id != appointment.id)
+        .filter(Appointment.is_active == True)
+        .first()
+    )
+
+    if existing_appointment:
+        raise HTTPException(
+            status_code=400,
+            detail="Selected new time slot is no longer available",
+        )
+
+    appointment.appointment_start = payload.appointment_start
+    appointment.appointment_end = payload.appointment_start + timedelta(
+        minutes=service.duration_minutes
+    )
+    appointment.status = "confirmed"
+    appointment.is_active = True
+
+    try:
+        db.commit()
+        db.refresh(appointment)
+        return appointment
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Selected new time slot is no longer available",
+        )

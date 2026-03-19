@@ -1,4 +1,5 @@
 from datetime import datetime
+
 from pydantic import BaseModel, EmailStr, field_validator
 
 
@@ -60,6 +61,18 @@ class AppointmentCreate(BaseModel):
 
 class AppointmentUpdateStatus(BaseModel):
     status: str
+
+
+class AppointmentReschedule(BaseModel):
+    appointment_start: datetime
+
+    @field_validator("appointment_start")
+    @classmethod
+    def validate_appointment_start(cls, v: datetime):
+        now = datetime.now()
+        if v < now:
+            raise ValueError("Appointment time cannot be in the past")
+        return v
 
 
 class AppointmentResponse(BaseModel):
