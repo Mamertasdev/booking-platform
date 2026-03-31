@@ -1,9 +1,10 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import get_current_active_user, get_db
+from app.models.specialist import Specialist
 from app.services.availability import (
     filter_past_slots_for_today,
     filter_slots_by_appointments,
@@ -25,8 +26,13 @@ def get_availability(
     specialist_id: int = Query(...),
     service_id: int = Query(...),
     target_date: date = Query(...),
+    current_user: Specialist = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
+    if current_user.role != "admin":
+        business_id = current_user.business_id
+        specialist_id = current_user.id
+
     weekday = get_weekday(target_date)
 
     working_hours = get_working_hours_for_day(
@@ -56,17 +62,19 @@ def get_availability(
         service_id=service_id,
     )
 
+    if service_duration_minutes is None:
+        raise HTTPException(status_code=404, detail="Service not found")
+
     slots = []
 
-    if service_duration_minutes:
-        for item in working_hours:
-            slots.extend(
-                generate_time_slots(
-                    start_time=item.start_time,
-                    end_time=item.end_time,
-                    duration_minutes=service_duration_minutes,
-                )
+    for item in working_hours:
+        slots.extend(
+            generate_time_slots(
+                start_time=item.start_time,
+                end_time=item.end_time,
+                duration_minutes=service_duration_minutes,
             )
+        )
 
     slots = filter_slots_by_exceptions(
         target_date=target_date,

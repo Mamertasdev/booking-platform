@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.appointment import router as appointment_router
+from app.api.auth import router as auth_router
 from app.api.availability import router as availability_router
 from app.api.availability_exception import router as availability_exception_router
 from app.api.business import router as business_router
@@ -37,6 +38,7 @@ def startup():
     init_db()
 
 
+app.include_router(auth_router, prefix="/api")
 app.include_router(business_router, prefix="/api")
 app.include_router(specialist_router, prefix="/api")
 app.include_router(service_router, prefix="/api")

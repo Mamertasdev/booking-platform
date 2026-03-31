@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import get_current_active_user, get_db
 from app.models.service import Service
+from app.models.specialist import Specialist
 from app.schemas.service import ServiceCreate, ServiceResponse, ServiceUpdate
 
 router = APIRouter()
@@ -43,9 +44,13 @@ def ensure_unique_active_service_name(
 def get_services(
     business_id: int | None = Query(default=None),
     include_inactive: bool = Query(default=False),
+    current_user: Specialist = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     query = db.query(Service)
+
+    if current_user.role != "admin":
+        business_id = current_user.business_id
 
     if business_id is not None:
         query = query.filter(Service.business_id == business_id)
@@ -57,7 +62,11 @@ def get_services(
 
 
 @router.get("/services/{service_id}", response_model=ServiceResponse)
-def get_service(service_id: int, db: Session = Depends(get_db)):
+def get_service(
+    service_id: int,
+    current_user: Specialist = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
     service = (
         db.query(Service)
         .filter(Service.id == service_id)
@@ -67,19 +76,31 @@ def get_service(service_id: int, db: Session = Depends(get_db)):
     if not service:
         raise HTTPException(status_code=404, detail="Service not found")
 
+    if current_user.role != "admin" and service.business_id != current_user.business_id:
+        raise HTTPException(status_code=403, detail="Not allowed")
+
     return service
 
 
 @router.post("/services", response_model=ServiceResponse)
-def create_service(payload: ServiceCreate, db: Session = Depends(get_db)):
+def create_service(
+    payload: ServiceCreate,
+    current_user: Specialist = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    business_id = payload.business_id
+
+    if current_user.role != "admin":
+        business_id = current_user.business_id
+
     ensure_unique_active_service_name(
         db=db,
-        business_id=payload.business_id,
+        business_id=business_id,
         service_name=payload.name,
     )
 
     service = Service(
-        business_id=payload.business_id,
+        business_id=business_id,
         name=payload.name.strip(),
         duration_minutes=payload.duration_minutes,
         price=payload.price,
@@ -95,6 +116,7 @@ def create_service(payload: ServiceCreate, db: Session = Depends(get_db)):
 def update_service(
     service_id: int,
     payload: ServiceUpdate,
+    current_user: Specialist = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     service = (
@@ -105,6 +127,9 @@ def update_service(
 
     if not service:
         raise HTTPException(status_code=404, detail="Service not found")
+
+    if current_user.role != "admin" and service.business_id != current_user.business_id:
+        raise HTTPException(status_code=403, detail="Not allowed")
 
     if payload.is_active:
         ensure_unique_active_service_name(
@@ -127,6 +152,7 @@ def update_service(
 @router.put("/services/{service_id}/disable", response_model=ServiceResponse)
 def disable_service(
     service_id: int,
+    current_user: Specialist = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
     service = (
@@ -137,6 +163,9 @@ def disable_service(
 
     if not service:
         raise HTTPException(status_code=404, detail="Service not found")
+
+    if current_user.role != "admin" and service.business_id != current_user.business_id:
+        raise HTTPException(status_code=403, detail="Not allowed")
 
     service.is_active = False
 
