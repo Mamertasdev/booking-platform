@@ -18,7 +18,7 @@ class ServicesApi {
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Failed to load services');
+      throw Exception('Failed to load services: ${response.body}');
     }
 
     final data = jsonDecode(response.body) as List<dynamic>;
@@ -38,7 +38,7 @@ class ServicesApi {
     );
 
     if (response.statusCode != 200 && response.statusCode != 201) {
-      throw Exception('Failed to create service');
+      throw Exception('Failed to create service: ${response.body}');
     }
 
     return jsonDecode(response.body) as Map<String, dynamic>;
@@ -63,7 +63,7 @@ class ServicesApi {
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Failed to update service');
+      throw Exception('Failed to update service: ${response.body}');
     }
 
     return jsonDecode(response.body) as Map<String, dynamic>;
@@ -76,7 +76,7 @@ class ServicesApi {
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Failed to disable service');
+      throw Exception('Failed to disable service: ${response.body}');
     }
 
     return jsonDecode(response.body) as Map<String, dynamic>;

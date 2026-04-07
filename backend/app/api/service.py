@@ -88,9 +88,14 @@ def create_service(
     current_user: Specialist = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    business_id = payload.business_id
-
-    if current_user.role != "admin":
+    if current_user.role == "admin":
+        if payload.business_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail="business_id is required for admin",
+            )
+        business_id = payload.business_id
+    else:
         business_id = current_user.business_id
 
     ensure_unique_active_service_name(

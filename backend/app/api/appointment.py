@@ -27,71 +27,15 @@ from app.services.availability import (
 router = APIRouter()
 
 
-@router.get("/appointments", response_model=list[AppointmentResponse])
-def get_appointments(
-    business_id: int | None = Query(default=None),
-    specialist_id: int | None = Query(default=None),
-    target_date: date | None = Query(default=None),
-    current_user: Specialist = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
-):
-    query = db.query(Appointment).filter(Appointment.is_active == True)
-
-    if current_user.role != "admin":
-        business_id = current_user.business_id
-        specialist_id = current_user.id
-
-    if business_id is not None:
-        query = query.filter(Appointment.business_id == business_id)
-
-    if specialist_id is not None:
-        query = query.filter(Appointment.specialist_id == specialist_id)
-
-    if target_date is not None:
-        day_start = datetime.combine(target_date, time.min)
-        day_end = datetime.combine(target_date, time.max)
-
-        query = query.filter(Appointment.appointment_start >= day_start)
-        query = query.filter(Appointment.appointment_start <= day_end)
-
-    return query.order_by(Appointment.appointment_start.asc()).all()
-
-
-@router.get("/appointments/{appointment_id}", response_model=AppointmentResponse)
-def get_appointment(
-    appointment_id: int,
-    current_user: Specialist = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
-):
-    appointment = (
-        db.query(Appointment)
-        .filter(Appointment.id == appointment_id)
-        .first()
-    )
-
-    if not appointment:
-        raise HTTPException(status_code=404, detail="Appointment not found")
-
-    if current_user.role != "admin":
-        if (
-            appointment.business_id != current_user.business_id
-            or appointment.specialist_id != current_user.id
-        ):
-            raise HTTPException(status_code=403, detail="Not allowed")
-
-    return appointment
-
-
-@router.post("/appointments", response_model=AppointmentResponse)
-def create_appointment(
+def create_appointment_internal(
     payload: AppointmentCreate,
-    current_user: Specialist = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session,
+    current_user: Specialist | None = None,
 ):
     business_id = payload.business_id
     specialist_id = payload.specialist_id
 
-    if current_user.role != "admin":
+    if current_user is not None and current_user.role != "admin":
         business_id = current_user.business_id
         specialist_id = current_user.id
 
@@ -212,6 +156,74 @@ def create_appointment(
             status_code=400,
             detail="Selected time slot is no longer available",
         )
+
+
+@router.get("/appointments", response_model=list[AppointmentResponse])
+def get_appointments(
+    business_id: int | None = Query(default=None),
+    specialist_id: int | None = Query(default=None),
+    target_date: date | None = Query(default=None),
+    current_user: Specialist = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    query = db.query(Appointment).filter(Appointment.is_active == True)
+
+    if current_user.role != "admin":
+        business_id = current_user.business_id
+        specialist_id = current_user.id
+
+    if business_id is not None:
+        query = query.filter(Appointment.business_id == business_id)
+
+    if specialist_id is not None:
+        query = query.filter(Appointment.specialist_id == specialist_id)
+
+    if target_date is not None:
+        day_start = datetime.combine(target_date, time.min)
+        day_end = datetime.combine(target_date, time.max)
+
+        query = query.filter(Appointment.appointment_start >= day_start)
+        query = query.filter(Appointment.appointment_start <= day_end)
+
+    return query.order_by(Appointment.appointment_start.asc()).all()
+
+
+@router.get("/appointments/{appointment_id}", response_model=AppointmentResponse)
+def get_appointment(
+    appointment_id: int,
+    current_user: Specialist = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    appointment = (
+        db.query(Appointment)
+        .filter(Appointment.id == appointment_id)
+        .first()
+    )
+
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    if current_user.role != "admin":
+        if (
+            appointment.business_id != current_user.business_id
+            or appointment.specialist_id != current_user.id
+        ):
+            raise HTTPException(status_code=403, detail="Not allowed")
+
+    return appointment
+
+
+@router.post("/appointments", response_model=AppointmentResponse)
+def create_appointment(
+    payload: AppointmentCreate,
+    current_user: Specialist = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    return create_appointment_internal(
+        payload=payload,
+        db=db,
+        current_user=current_user,
+    )
 
 
 @router.put("/appointments/{appointment_id}/status", response_model=AppointmentResponse)

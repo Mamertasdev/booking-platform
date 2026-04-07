@@ -1,137 +1,87 @@
-from datetime import date
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, get_db
+from app.api.deps import get_current_active_user, require_admin, get_db
+from app.models.business import Business
 from app.models.specialist import Specialist
-from app.services.availability import (
-    filter_past_slots_for_today,
-    filter_slots_by_appointments,
-    filter_slots_by_exceptions,
-    generate_time_slots,
-    get_appointments_for_day,
-    get_exceptions_for_day,
-    get_service_duration_minutes,
-    get_weekday,
-    get_working_hours_for_day,
-)
+from app.schemas.business import BusinessCreate, BusinessResponse
 
 router = APIRouter()
 
 
-@router.get("/availability")
-def get_availability(
-    business_id: int = Query(...),
-    specialist_id: int = Query(...),
-    service_id: int = Query(...),
-    target_date: date = Query(...),
+@router.get("/businesses", response_model=list[BusinessResponse])
+def get_businesses(
+    include_inactive: bool = Query(default=False),
     current_user: Specialist = Depends(get_current_active_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db)
 ):
+    query = db.query(Business)
+
     if current_user.role != "admin":
-        business_id = current_user.business_id
-        specialist_id = current_user.id
+        query = query.filter(Business.id == current_user.business_id)
 
-    weekday = get_weekday(target_date)
+    if not include_inactive:
+        query = query.filter(Business.is_active == True)
 
-    working_hours = get_working_hours_for_day(
-        db=db,
-        business_id=business_id,
-        specialist_id=specialist_id,
-        target_date=target_date,
+    return query.order_by(Business.name.asc()).all()
+
+
+@router.get("/businesses/{business_id}", response_model=BusinessResponse)
+def get_business(
+    business_id: int,
+    current_user: Specialist = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    business = (
+        db.query(Business)
+        .filter(Business.id == business_id)
+        .first()
     )
 
-    exceptions = get_exceptions_for_day(
-        db=db,
-        business_id=business_id,
-        specialist_id=specialist_id,
-        target_date=target_date,
+    if not business:
+        raise HTTPException(status_code=404, detail="Business not found")
+
+    if current_user.role != "admin":
+        if business.id != current_user.business_id:
+            raise HTTPException(status_code=403, detail="Not allowed")
+
+    return business
+
+
+@router.post("/businesses", response_model=BusinessResponse)
+def create_business(
+    payload: BusinessCreate,
+    current_user: Specialist = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    business = Business(
+        name=payload.name.strip(),
+        is_active=True,
     )
 
-    appointments = get_appointments_for_day(
-        db=db,
-        business_id=business_id,
-        specialist_id=specialist_id,
-        target_date=target_date,
+    db.add(business)
+    db.commit()
+    db.refresh(business)
+    return business
+
+
+@router.put("/businesses/{business_id}/disable", response_model=BusinessResponse)
+def disable_business(
+    business_id: int,
+    current_user: Specialist = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    business = (
+        db.query(Business)
+        .filter(Business.id == business_id)
+        .first()
     )
 
-    service_duration_minutes = get_service_duration_minutes(
-        db=db,
-        business_id=business_id,
-        service_id=service_id,
-    )
+    if not business:
+        raise HTTPException(status_code=404, detail="Business not found")
 
-    if service_duration_minutes is None:
-        raise HTTPException(status_code=404, detail="Service not found")
+    business.is_active = False
 
-    slots = []
-
-    for item in working_hours:
-        slots.extend(
-            generate_time_slots(
-                start_time=item.start_time,
-                end_time=item.end_time,
-                duration_minutes=service_duration_minutes,
-            )
-        )
-
-    slots = filter_slots_by_exceptions(
-        target_date=target_date,
-        slots=slots,
-        exceptions=exceptions,
-    )
-
-    slots = filter_slots_by_appointments(
-        target_date=target_date,
-        slots=slots,
-        appointments=appointments,
-    )
-
-    slots = filter_past_slots_for_today(
-        target_date=target_date,
-        slots=slots,
-    )
-
-    return {
-        "business_id": business_id,
-        "specialist_id": specialist_id,
-        "service_id": service_id,
-        "target_date": str(target_date),
-        "weekday": weekday,
-        "service_duration_minutes": service_duration_minutes,
-        "working_hours": [
-            {
-                "id": item.id,
-                "start_time": str(item.start_time),
-                "end_time": str(item.end_time),
-            }
-            for item in working_hours
-        ],
-        "exceptions": [
-            {
-                "id": item.id,
-                "start_datetime": item.start_datetime.isoformat(),
-                "end_datetime": item.end_datetime.isoformat(),
-                "reason": item.reason,
-            }
-            for item in exceptions
-        ],
-        "appointments": [
-            {
-                "id": item.id,
-                "appointment_start": item.appointment_start.isoformat(),
-                "appointment_end": item.appointment_end.isoformat(),
-                "status": item.status,
-                "client_full_name": item.client_full_name,
-            }
-            for item in appointments
-        ],
-        "slots": [
-            {
-                "start_time": str(item["start_time"]),
-                "end_time": str(item["end_time"]),
-            }
-            for item in slots
-        ],
-    }
+    db.commit()
+    db.refresh(business)
+    return business

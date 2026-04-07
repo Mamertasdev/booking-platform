@@ -5,8 +5,9 @@ import '../../../core/api/auth_api.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/storage/token_storage.dart';
 import '../../auth/presentation/login_page.dart';
-import 'appointments/presentation/my_appointments_page.dart';
 import '../services/data/presentation/my_services_page.dart';
+import 'appointments/presentation/my_appointments_page.dart';
+import 'working_hours/my_working_hours_page.dart';
 
 class SpecialistHomePage extends StatelessWidget {
   const SpecialistHomePage({super.key, required this.user});
@@ -23,6 +24,12 @@ class SpecialistHomePage extends StatelessWidget {
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const MyServicesPage()));
+  }
+
+  void _openWorkingHours(BuildContext context) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => MyWorkingHoursPage(user: user)));
   }
 
   Future<void> _logout(BuildContext context) async {
@@ -90,10 +97,13 @@ class SpecialistHomePage extends StatelessWidget {
                       onTap: () => _openServices(context),
                     ),
                   ),
-                  const Card(
+                  Card(
                     child: ListTile(
-                      title: Text('Darbo laikas'),
-                      subtitle: Text('Čia bus specialisto darbo laikai'),
+                      title: const Text('Darbo laikas'),
+                      subtitle: const Text(
+                        'Atidaryti specialisto darbo laikus',
+                      ),
+                      onTap: () => _openWorkingHours(context),
                     ),
                   ),
                   const Card(

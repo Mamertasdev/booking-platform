@@ -4,7 +4,7 @@ from pydantic import BaseModel, field_validator
 
 
 class ServiceCreate(BaseModel):
-    business_id: int
+    business_id: int | None = None
     name: str
     duration_minutes: int
     price: int

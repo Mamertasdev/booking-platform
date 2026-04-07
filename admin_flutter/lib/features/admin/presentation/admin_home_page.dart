@@ -5,11 +5,25 @@ import '../../../core/api/auth_api.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/storage/token_storage.dart';
 import '../../auth/presentation/login_page.dart';
+import 'businesses_page.dart';
+import 'specialists_page.dart';
 
 class AdminHomePage extends StatelessWidget {
   const AdminHomePage({super.key, required this.user});
 
   final Map<String, dynamic> user;
+
+  void _openBusinesses(BuildContext context) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const BusinessesPage()));
+  }
+
+  void _openSpecialists(BuildContext context) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const SpecialistsPage()));
+  }
 
   Future<void> _logout(BuildContext context) async {
     final tokenStorage = TokenStorage();
@@ -61,20 +75,24 @@ class AdminHomePage extends StatelessWidget {
             const SizedBox(height: 16),
             Expanded(
               child: ListView(
-                children: const [
+                children: [
                   Card(
                     child: ListTile(
-                      title: Text('Verslai'),
-                      subtitle: Text('Čia bus visų verslų sąrašas'),
+                      title: const Text('Verslai'),
+                      subtitle: const Text('Peržiūrėti ir kurti verslus'),
+                      onTap: () => _openBusinesses(context),
                     ),
                   ),
                   Card(
                     child: ListTile(
-                      title: Text('Specialistai'),
-                      subtitle: Text('Čia bus visų specialistų sąrašas'),
+                      title: const Text('Vartotojai'),
+                      subtitle: const Text(
+                        'Peržiūrėti ir kurti admin bei specialistų vartotojus',
+                      ),
+                      onTap: () => _openSpecialists(context),
                     ),
                   ),
-                  Card(
+                  const Card(
                     child: ListTile(
                       title: Text('Rezervacijos'),
                       subtitle: Text('Čia bus visų rezervacijų sąrašas'),
