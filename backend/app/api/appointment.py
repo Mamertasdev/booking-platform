@@ -1,123 +1,90 @@
-from datetime import time
+from datetime import date, datetime, time, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, get_db
+from app.models.appointment import Appointment
+from app.models.service import Service
 from app.models.specialist import Specialist
-from app.models.working_hour import WorkingHour
-from app.schemas.working_hour import (
-    WorkingHourCreate,
-    WorkingHourResponse,
-    WorkingHourUpdate,
+from app.schemas.appointment import (
+    AppointmentCreate,
+    AppointmentReschedule,
+    AppointmentResponse,
+    AppointmentUpdateStatus,
+)
+from app.services.availability import (
+    filter_past_slots_for_today,
+    filter_slots_by_appointments,
+    filter_slots_by_exceptions,
+    generate_time_slots,
+    get_appointments_for_day,
+    get_exceptions_for_day,
+    get_working_hours_for_day,
 )
 
 router = APIRouter()
 
 
-def time_ranges_overlap(
-    start_a: time,
-    end_a: time,
-    start_b: time,
-    end_b: time,
-) -> bool:
-    return start_a < end_b and start_b < end_a
-
-
-def ensure_no_working_hour_overlap(
-    db: Session,
-    business_id: int,
-    specialist_id: int,
-    weekday: int,
-    start_time: time,
-    end_time: time,
-    exclude_id: int | None = None,
-):
-    query = (
-        db.query(WorkingHour)
-        .filter(WorkingHour.business_id == business_id)
-        .filter(WorkingHour.specialist_id == specialist_id)
-        .filter(WorkingHour.weekday == weekday)
-        .filter(WorkingHour.is_active == True)
-    )
-
-    if exclude_id is not None:
-        query = query.filter(WorkingHour.id != exclude_id)
-
-    existing_rows = query.all()
-
-    for row in existing_rows:
-        if time_ranges_overlap(
-            start_time,
-            end_time,
-            row.start_time,
-            row.end_time,
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail="Working hour overlaps with an existing interval",
-            )
-
-
-@router.get("/working-hours", response_model=list[WorkingHourResponse])
-def get_working_hours(
+@router.get("/appointments", response_model=list[AppointmentResponse])
+def get_appointments(
     business_id: int | None = Query(default=None),
     specialist_id: int | None = Query(default=None),
-    include_inactive: bool = Query(default=False),
+    target_date: date | None = Query(default=None),
     current_user: Specialist = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    query = db.query(WorkingHour)
+    query = db.query(Appointment).filter(Appointment.is_active == True)
 
     if current_user.role != "admin":
         business_id = current_user.business_id
         specialist_id = current_user.id
 
     if business_id is not None:
-        query = query.filter(WorkingHour.business_id == business_id)
+        query = query.filter(Appointment.business_id == business_id)
 
     if specialist_id is not None:
-        query = query.filter(WorkingHour.specialist_id == specialist_id)
+        query = query.filter(Appointment.specialist_id == specialist_id)
 
-    if not include_inactive:
-        query = query.filter(WorkingHour.is_active == True)
+    if target_date is not None:
+        day_start = datetime.combine(target_date, time.min)
+        day_end = datetime.combine(target_date, time.max)
 
-    return (
-        query.order_by(
-            WorkingHour.weekday.asc(),
-            WorkingHour.start_time.asc(),
-        ).all()
-    )
+        query = query.filter(Appointment.appointment_start >= day_start)
+        query = query.filter(Appointment.appointment_start <= day_end)
+
+    return query.order_by(Appointment.appointment_start.asc()).all()
 
 
-@router.get("/working-hours/{working_hour_id}", response_model=WorkingHourResponse)
-def get_working_hour(
-    working_hour_id: int,
+@router.get("/appointments/{appointment_id}", response_model=AppointmentResponse)
+def get_appointment(
+    appointment_id: int,
     current_user: Specialist = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    working_hour = (
-        db.query(WorkingHour)
-        .filter(WorkingHour.id == working_hour_id)
+    appointment = (
+        db.query(Appointment)
+        .filter(Appointment.id == appointment_id)
         .first()
     )
 
-    if not working_hour:
-        raise HTTPException(status_code=404, detail="Working hour not found")
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
 
     if current_user.role != "admin":
         if (
-            working_hour.business_id != current_user.business_id
-            or working_hour.specialist_id != current_user.id
+            appointment.business_id != current_user.business_id
+            or appointment.specialist_id != current_user.id
         ):
             raise HTTPException(status_code=403, detail="Not allowed")
 
-    return working_hour
+    return appointment
 
 
-@router.post("/working-hours", response_model=WorkingHourResponse)
-def create_working_hour(
-    payload: WorkingHourCreate,
+@router.post("/appointments", response_model=AppointmentResponse)
+def create_appointment(
+    payload: AppointmentCreate,
     current_user: Specialist = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
@@ -128,98 +95,313 @@ def create_working_hour(
         business_id = current_user.business_id
         specialist_id = current_user.id
 
-    ensure_no_working_hour_overlap(
+    service = (
+        db.query(Service)
+        .filter(Service.id == payload.service_id)
+        .filter(Service.business_id == business_id)
+        .filter(Service.is_active == True)
+        .first()
+    )
+
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
+
+    target_date = payload.appointment_start.date()
+
+    working_hours = get_working_hours_for_day(
         db=db,
         business_id=business_id,
         specialist_id=specialist_id,
-        weekday=payload.weekday,
-        start_time=payload.start_time,
-        end_time=payload.end_time,
+        target_date=target_date,
     )
 
-    working_hour = WorkingHour(
+    exceptions = get_exceptions_for_day(
+        db=db,
         business_id=business_id,
         specialist_id=specialist_id,
-        weekday=payload.weekday,
-        start_time=payload.start_time,
-        end_time=payload.end_time,
+        target_date=target_date,
+    )
+
+    appointments = get_appointments_for_day(
+        db=db,
+        business_id=business_id,
+        specialist_id=specialist_id,
+        target_date=target_date,
+    )
+
+    slots = []
+
+    for item in working_hours:
+        slots.extend(
+            generate_time_slots(
+                start_time=item.start_time,
+                end_time=item.end_time,
+                duration_minutes=service.duration_minutes,
+            )
+        )
+
+    slots = filter_slots_by_exceptions(
+        target_date=target_date,
+        slots=slots,
+        exceptions=exceptions,
+    )
+
+    slots = filter_slots_by_appointments(
+        target_date=target_date,
+        slots=slots,
+        appointments=appointments,
+    )
+
+    slots = filter_past_slots_for_today(
+        target_date=target_date,
+        slots=slots,
+    )
+
+    slot_exists = any(
+        slot["start_time"] == payload.appointment_start.time()
+        for slot in slots
+    )
+
+    if not slot_exists:
+        raise HTTPException(
+            status_code=400,
+            detail="Selected time slot is not available",
+        )
+
+    existing_appointment = (
+        db.query(Appointment)
+        .filter(Appointment.business_id == business_id)
+        .filter(Appointment.specialist_id == specialist_id)
+        .filter(Appointment.appointment_start == payload.appointment_start)
+        .filter(Appointment.is_active == True)
+        .first()
+    )
+
+    if existing_appointment:
+        raise HTTPException(
+            status_code=400,
+            detail="Selected time slot is no longer available",
+        )
+
+    appointment_end = payload.appointment_start + timedelta(
+        minutes=service.duration_minutes
+    )
+
+    appointment = Appointment(
+        business_id=business_id,
+        specialist_id=specialist_id,
+        service_id=payload.service_id,
+        client_full_name=payload.client_full_name,
+        client_email=payload.client_email,
+        client_phone=payload.client_phone,
+        notes=payload.notes,
+        appointment_start=payload.appointment_start,
+        appointment_end=appointment_end,
+        status="confirmed",
         is_active=True,
     )
 
-    db.add(working_hour)
-    db.commit()
-    db.refresh(working_hour)
-    return working_hour
-
-
-@router.put("/working-hours/{working_hour_id}", response_model=WorkingHourResponse)
-def update_working_hour(
-    working_hour_id: int,
-    payload: WorkingHourUpdate,
-    current_user: Specialist = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
-):
-    working_hour = (
-        db.query(WorkingHour)
-        .filter(WorkingHour.id == working_hour_id)
-        .first()
-    )
-
-    if not working_hour:
-        raise HTTPException(status_code=404, detail="Working hour not found")
-
-    if current_user.role != "admin":
-        if (
-            working_hour.business_id != current_user.business_id
-            or working_hour.specialist_id != current_user.id
-        ):
-            raise HTTPException(status_code=403, detail="Not allowed")
-
-    if payload.is_active:
-        ensure_no_working_hour_overlap(
-            db=db,
-            business_id=working_hour.business_id,
-            specialist_id=working_hour.specialist_id,
-            weekday=payload.weekday,
-            start_time=payload.start_time,
-            end_time=payload.end_time,
-            exclude_id=working_hour.id,
+    try:
+        db.add(appointment)
+        db.commit()
+        db.refresh(appointment)
+        return appointment
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Selected time slot is no longer available",
         )
 
-    working_hour.weekday = payload.weekday
-    working_hour.start_time = payload.start_time
-    working_hour.end_time = payload.end_time
-    working_hour.is_active = payload.is_active
 
-    db.commit()
-    db.refresh(working_hour)
-    return working_hour
-
-
-@router.put("/working-hours/{working_hour_id}/disable", response_model=WorkingHourResponse)
-def disable_working_hour(
-    working_hour_id: int,
+@router.put("/appointments/{appointment_id}/status", response_model=AppointmentResponse)
+def update_appointment_status(
+    appointment_id: int,
+    payload: AppointmentUpdateStatus,
     current_user: Specialist = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    working_hour = (
-        db.query(WorkingHour)
-        .filter(WorkingHour.id == working_hour_id)
+    appointment = (
+        db.query(Appointment)
+        .filter(Appointment.id == appointment_id)
         .first()
     )
 
-    if not working_hour:
-        raise HTTPException(status_code=404, detail="Working hour not found")
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
 
     if current_user.role != "admin":
         if (
-            working_hour.business_id != current_user.business_id
-            or working_hour.specialist_id != current_user.id
+            appointment.business_id != current_user.business_id
+            or appointment.specialist_id != current_user.id
         ):
             raise HTTPException(status_code=403, detail="Not allowed")
 
-    working_hour.is_active = False
+    appointment.status = payload.status
 
     db.commit()
-    db.refresh(working_hour)
-    return working_hour
+    db.refresh(appointment)
+    return appointment
+
+
+@router.put("/appointments/{appointment_id}/cancel", response_model=AppointmentResponse)
+def cancel_appointment(
+    appointment_id: int,
+    current_user: Specialist = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    appointment = (
+        db.query(Appointment)
+        .filter(Appointment.id == appointment_id)
+        .first()
+    )
+
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    if current_user.role != "admin":
+        if (
+            appointment.business_id != current_user.business_id
+            or appointment.specialist_id != current_user.id
+        ):
+            raise HTTPException(status_code=403, detail="Not allowed")
+
+    appointment.status = "cancelled_by_admin"
+    appointment.is_active = False
+
+    db.commit()
+    db.refresh(appointment)
+    return appointment
+
+
+@router.put("/appointments/{appointment_id}/reschedule", response_model=AppointmentResponse)
+def reschedule_appointment(
+    appointment_id: int,
+    payload: AppointmentReschedule,
+    current_user: Specialist = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    appointment = (
+        db.query(Appointment)
+        .filter(Appointment.id == appointment_id)
+        .first()
+    )
+
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    if current_user.role != "admin":
+        if (
+            appointment.business_id != current_user.business_id
+            or appointment.specialist_id != current_user.id
+        ):
+            raise HTTPException(status_code=403, detail="Not allowed")
+
+    service = (
+        db.query(Service)
+        .filter(Service.id == appointment.service_id)
+        .filter(Service.business_id == appointment.business_id)
+        .filter(Service.is_active == True)
+        .first()
+    )
+
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
+
+    target_date = payload.appointment_start.date()
+
+    working_hours = get_working_hours_for_day(
+        db=db,
+        business_id=appointment.business_id,
+        specialist_id=appointment.specialist_id,
+        target_date=target_date,
+    )
+
+    exceptions = get_exceptions_for_day(
+        db=db,
+        business_id=appointment.business_id,
+        specialist_id=appointment.specialist_id,
+        target_date=target_date,
+    )
+
+    appointments = get_appointments_for_day(
+        db=db,
+        business_id=appointment.business_id,
+        specialist_id=appointment.specialist_id,
+        target_date=target_date,
+    )
+
+    appointments = [item for item in appointments if item.id != appointment.id]
+
+    slots = []
+
+    for item in working_hours:
+        slots.extend(
+            generate_time_slots(
+                start_time=item.start_time,
+                end_time=item.end_time,
+                duration_minutes=service.duration_minutes,
+            )
+        )
+
+    slots = filter_slots_by_exceptions(
+        target_date=target_date,
+        slots=slots,
+        exceptions=exceptions,
+    )
+
+    slots = filter_slots_by_appointments(
+        target_date=target_date,
+        slots=slots,
+        appointments=appointments,
+    )
+
+    slots = filter_past_slots_for_today(
+        target_date=target_date,
+        slots=slots,
+    )
+
+    slot_exists = any(
+        slot["start_time"] == payload.appointment_start.time()
+        for slot in slots
+    )
+
+    if not slot_exists:
+        raise HTTPException(
+            status_code=400,
+            detail="Selected new time slot is not available",
+        )
+
+    existing_appointment = (
+        db.query(Appointment)
+        .filter(Appointment.business_id == appointment.business_id)
+        .filter(Appointment.specialist_id == appointment.specialist_id)
+        .filter(Appointment.appointment_start == payload.appointment_start)
+        .filter(Appointment.id != appointment.id)
+        .filter(Appointment.is_active == True)
+        .first()
+    )
+
+    if existing_appointment:
+        raise HTTPException(
+            status_code=400,
+            detail="Selected new time slot is no longer available",
+        )
+
+    appointment.appointment_start = payload.appointment_start
+    appointment.appointment_end = payload.appointment_start + timedelta(
+        minutes=service.duration_minutes
+    )
+    appointment.status = "confirmed"
+    appointment.is_active = True
+
+    try:
+        db.commit()
+        db.refresh(appointment)
+        return appointment
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Selected new time slot is no longer available",
+        )
