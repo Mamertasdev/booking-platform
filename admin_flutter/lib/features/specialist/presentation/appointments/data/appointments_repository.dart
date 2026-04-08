@@ -27,4 +27,26 @@ class AppointmentsRepository {
       targetDate: targetDate,
     );
   }
+
+  Future<Map<String, dynamic>> createAppointment({
+    required int businessId,
+    required int specialistId,
+    required int serviceId,
+    required String clientFullName,
+    required String clientEmail,
+    String? clientPhone,
+    String? notes,
+    required String appointmentStartIso,
+  }) async {
+    return _appointmentsApi.createAppointment(
+      businessId: businessId,
+      specialistId: specialistId,
+      serviceId: serviceId,
+      clientFullName: clientFullName,
+      clientEmail: clientEmail,
+      clientPhone: clientPhone,
+      notes: notes,
+      appointmentStartIso: appointmentStartIso,
+    );
+  }
 }

@@ -43,4 +43,36 @@ class AppointmentsApi {
 
     return data.map((item) => item as Map<String, dynamic>).toList();
   }
+
+  Future<Map<String, dynamic>> createAppointment({
+    required int businessId,
+    required int specialistId,
+    required int serviceId,
+    required String clientFullName,
+    required String clientEmail,
+    String? clientPhone,
+    String? notes,
+    required String appointmentStartIso,
+  }) async {
+    final response = await _apiClient.post(
+      '/api/appointments',
+      authenticated: true,
+      body: {
+        'business_id': businessId,
+        'specialist_id': specialistId,
+        'service_id': serviceId,
+        'client_full_name': clientFullName,
+        'client_email': clientEmail,
+        'client_phone': clientPhone,
+        'notes': notes,
+        'appointment_start': appointmentStartIso,
+      },
+    );
+
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception('Failed to create appointment: ${response.body}');
+    }
+
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
 }

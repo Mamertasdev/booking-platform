@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/api/api_client.dart';
+import '../../../../core/api/appointments_api.dart';
 import '../../../../core/api/availability_api.dart';
 import '../../../../core/api/services_api.dart';
 import '../../../../core/storage/token_storage.dart';
 import '../../data/availability_repository.dart';
 import '../../services/data/services_repository.dart';
+import '../appointments/data/appointments_repository.dart';
+import 'availability_appointment_form_page.dart';
 
 class SpecialistAvailabilityPage extends StatefulWidget {
   const SpecialistAvailabilityPage({super.key, required this.user});
@@ -21,6 +24,7 @@ class _SpecialistAvailabilityPageState
     extends State<SpecialistAvailabilityPage> {
   late final ServicesRepository _servicesRepository;
   late final AvailabilityRepository _availabilityRepository;
+  late final AppointmentsRepository _appointmentsRepository;
 
   DateTime _selectedDate = DateTime.now();
   bool _isLoadingServices = true;
@@ -43,10 +47,14 @@ class _SpecialistAvailabilityPageState
 
     final servicesApi = ServicesApi(apiClient);
     final availabilityApi = AvailabilityApi(apiClient);
+    final appointmentsApi = AppointmentsApi(apiClient);
 
     _servicesRepository = ServicesRepository(servicesApi: servicesApi);
     _availabilityRepository = AvailabilityRepository(
       availabilityApi: availabilityApi,
+    );
+    _appointmentsRepository = AppointmentsRepository(
+      appointmentsApi: appointmentsApi,
     );
 
     _loadServices();
@@ -105,6 +113,24 @@ class _SpecialistAvailabilityPageState
       default:
         return 'Nežinoma diena';
     }
+  }
+
+  DateTime? _buildAppointmentStartFromSlot(String slotStartTime) {
+    final parts = slotStartTime.split(':');
+    if (parts.length < 2) return null;
+
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+
+    if (hour == null || minute == null) return null;
+
+    return DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      hour,
+      minute,
+    );
   }
 
   Future<void> _loadServices() async {
@@ -222,6 +248,146 @@ class _SpecialistAvailabilityPageState
     _loadAvailability();
   }
 
+  Future<void> _showNearestSlot() async {
+    final businessId = widget.user['business_id'] as int?;
+    final specialistId = widget.user['id'] as int?;
+    final serviceId = _selectedServiceId;
+
+    if (businessId == null || specialistId == null || serviceId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nepavyko nustatyti reikiamų duomenų')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoadingAvailability = true;
+      _errorText = null;
+    });
+
+    try {
+      for (int offset = 0; offset < 30; offset++) {
+        final candidateDate = _selectedDate.add(Duration(days: offset));
+
+        final data = await _availabilityRepository.getAvailability(
+          businessId: businessId,
+          specialistId: specialistId,
+          serviceId: serviceId,
+          targetDate: _toApiDate(candidateDate),
+        );
+
+        final slots = data['slots'] as List<dynamic>? ?? [];
+
+        if (slots.isNotEmpty) {
+          final firstSlot = slots.first as Map<String, dynamic>;
+          final startTime = _normalizeTime(
+            firstSlot['start_time']?.toString() ?? '',
+          );
+          final endTime = _normalizeTime(
+            firstSlot['end_time']?.toString() ?? '',
+          );
+
+          if (!mounted) return;
+
+          setState(() {
+            _selectedDate = candidateDate;
+            _availabilityData = data;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Artimiausias laikas: ${_toDisplayDate(candidateDate)} $startTime - $endTime',
+              ),
+            ),
+          );
+          return;
+        }
+      }
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Per artimiausias 30 dienų laisvų laikų nerasta'),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorText = 'Nepavyko surasti artimiausio laiko';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingAvailability = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _openCreateAppointmentForSlot(Map<String, dynamic> slot) async {
+    final businessId = widget.user['business_id'] as int?;
+    final specialistId = widget.user['id'] as int?;
+    final serviceId = _selectedServiceId;
+
+    if (businessId == null || specialistId == null || serviceId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nepavyko nustatyti reikiamų duomenų')),
+      );
+      return;
+    }
+
+    final slotStartTime = slot['start_time']?.toString() ?? '';
+    final slotEndTime = slot['end_time']?.toString() ?? '';
+
+    final appointmentStart = _buildAppointmentStartFromSlot(slotStartTime);
+    if (appointmentStart == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nepavyko suformuoti rezervacijos laiko')),
+      );
+      return;
+    }
+
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => AvailabilityAppointmentFormPage(
+          slotLabel:
+              '${_toDisplayDate(_selectedDate)} ${_normalizeTime(slotStartTime)} - ${_normalizeTime(slotEndTime)}',
+          onSubmit:
+              ({
+                required String clientFullName,
+                required String clientEmail,
+                String? clientPhone,
+                String? notes,
+              }) {
+                return _appointmentsRepository.createAppointment(
+                  businessId: businessId,
+                  specialistId: specialistId,
+                  serviceId: serviceId,
+                  clientFullName: clientFullName,
+                  clientEmail: clientEmail,
+                  clientPhone: clientPhone,
+                  notes: notes,
+                  appointmentStartIso: appointmentStart.toIso8601String(),
+                );
+              },
+        ),
+      ),
+    );
+
+    if (result == true) {
+      await _loadAvailability();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Rezervacija sukurta')));
+    }
+  }
+
   Widget _buildTopControls() {
     if (_isLoadingServices) {
       return const Padding(
@@ -310,9 +476,20 @@ class _SpecialistAvailabilityPageState
               ],
             ),
             const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: _pickDate,
-              child: const Text('Pasirinkti datą'),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                OutlinedButton(
+                  onPressed: _pickDate,
+                  child: const Text('Pasirinkti datą'),
+                ),
+                ElevatedButton(
+                  onPressed: _isLoadingAvailability ? null : _showNearestSlot,
+                  child: const Text('Rodyti artimiausią laiką'),
+                ),
+              ],
             ),
           ],
         ),
@@ -356,8 +533,15 @@ class _SpecialistAvailabilityPageState
                   item['end_time']?.toString() ?? '',
                 );
 
-                return Chip(label: Text('$startTime - $endTime'));
+                return ActionChip(
+                  label: Text('$startTime - $endTime'),
+                  onPressed: () => _openCreateAppointmentForSlot(item),
+                );
               }).toList(),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Paspauskite ant laiko, jei norite sukurti rezervaciją.',
             ),
           ],
         ),
