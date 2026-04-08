@@ -9,4 +9,10 @@ class AppointmentsRepository {
   Future<List<Map<String, dynamic>>> getMyAppointments() async {
     return _appointmentsApi.getAppointments();
   }
+
+  Future<List<Map<String, dynamic>>> getMyAppointmentsForDate({
+    required String targetDate,
+  }) async {
+    return _appointmentsApi.getAppointments(targetDate: targetDate);
+  }
 }

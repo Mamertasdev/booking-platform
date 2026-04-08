@@ -36,7 +36,7 @@ class AppointmentsApi {
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Failed to load appointments');
+      throw Exception('Failed to load appointments: ${response.body}');
     }
 
     final data = jsonDecode(response.body) as List<dynamic>;
