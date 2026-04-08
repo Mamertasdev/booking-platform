@@ -9,6 +9,7 @@ import '../services/data/presentation/my_services_page.dart';
 import 'appointments/presentation/my_appointments_page.dart';
 import 'availability/specialist_availability_page.dart';
 import 'calendar/specialist_calendar_page.dart';
+import 'exceptions/my_availability_exceptions_page.dart';
 import 'working_hours/my_working_hours_page.dart';
 
 class SpecialistHomePage extends StatelessWidget {
@@ -43,6 +44,14 @@ class SpecialistHomePage extends StatelessWidget {
   void _openAvailability(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => SpecialistAvailabilityPage(user: user)),
+    );
+  }
+
+  void _openExceptions(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => MyAvailabilityExceptionsPage(user: user),
+      ),
     );
   }
 
@@ -118,6 +127,13 @@ class SpecialistHomePage extends StatelessWidget {
                         'Atidaryti specialisto darbo laikus',
                       ),
                       onTap: () => _openWorkingHours(context),
+                    ),
+                  ),
+                  Card(
+                    child: ListTile(
+                      title: const Text('Išimtys'),
+                      subtitle: const Text('Valdyti darbo grafiko išimtis'),
+                      onTap: () => _openExceptions(context),
                     ),
                   ),
                   Card(
