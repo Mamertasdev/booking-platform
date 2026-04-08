@@ -15,4 +15,16 @@ class AppointmentsRepository {
   }) async {
     return _appointmentsApi.getAppointments(targetDate: targetDate);
   }
+
+  Future<List<Map<String, dynamic>>> getAppointments({
+    int? businessId,
+    int? specialistId,
+    String? targetDate,
+  }) async {
+    return _appointmentsApi.getAppointments(
+      businessId: businessId,
+      specialistId: specialistId,
+      targetDate: targetDate,
+    );
+  }
 }

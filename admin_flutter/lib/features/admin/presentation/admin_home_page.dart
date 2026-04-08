@@ -5,6 +5,7 @@ import '../../../core/api/auth_api.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/storage/token_storage.dart';
 import '../../auth/presentation/login_page.dart';
+import 'admin_appointments_page.dart';
 import 'businesses_page.dart';
 import 'specialists_page.dart';
 
@@ -23,6 +24,12 @@ class AdminHomePage extends StatelessWidget {
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const SpecialistsPage()));
+  }
+
+  void _openAppointments(BuildContext context) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const AdminAppointmentsPage()));
   }
 
   Future<void> _logout(BuildContext context) async {
@@ -92,10 +99,13 @@ class AdminHomePage extends StatelessWidget {
                       onTap: () => _openSpecialists(context),
                     ),
                   ),
-                  const Card(
+                  Card(
                     child: ListTile(
-                      title: Text('Rezervacijos'),
-                      subtitle: Text('Čia bus visų rezervacijų sąrašas'),
+                      title: const Text('Rezervacijos'),
+                      subtitle: const Text(
+                        'Peržiūrėti visas rezervacijas su filtrais',
+                      ),
+                      onTap: () => _openAppointments(context),
                     ),
                   ),
                 ],
