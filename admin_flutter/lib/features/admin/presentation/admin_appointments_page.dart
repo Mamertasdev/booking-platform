@@ -6,6 +6,7 @@ import '../../../core/api/businesses_api.dart';
 import '../../../core/api/specialists_api.dart';
 import '../../../core/storage/token_storage.dart';
 import '../../specialist/presentation/appointments/data/appointments_repository.dart';
+import '../../specialist/presentation/appointments/presentation/appointment_reschedule_slot_picker_page.dart';
 import '../data/businesses_repository.dart';
 import '../data/specialists_repository.dart';
 
@@ -223,6 +224,96 @@ class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
     return 'ID: $specialistId';
   }
 
+  Future<void> _changeStatus({
+    required int appointmentId,
+    required String status,
+  }) async {
+    try {
+      await _appointmentsRepository.updateAppointmentStatus(
+        appointmentId: appointmentId,
+        status: status,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vizito statusas atnaujintas')),
+      );
+
+      await _loadAppointments();
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nepavyko atnaujinti statuso')),
+      );
+    }
+  }
+
+  Future<void> _cancelAppointment({required int appointmentId}) async {
+    try {
+      await _appointmentsRepository.cancelAppointment(
+        appointmentId: appointmentId,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Vizitas atšauktas')));
+
+      await _loadAppointments();
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Nepavyko atšaukti vizito')));
+    }
+  }
+
+  Future<void> _openReschedulePage(Map<String, dynamic> appointment) async {
+    final appointmentId = appointment['id'] as int;
+    final appointmentStart = appointment['appointment_start']?.toString() ?? '';
+    final businessId = appointment['business_id'] as int?;
+    final specialistId = appointment['specialist_id'] as int?;
+    final serviceId = appointment['service_id'] as int?;
+
+    if (businessId == null || specialistId == null || serviceId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nepavyko nustatyti vizito duomenų')),
+      );
+      return;
+    }
+
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => AppointmentRescheduleSlotPickerPage(
+          businessId: businessId,
+          specialistId: specialistId,
+          serviceId: serviceId,
+          initialAppointmentStart: appointmentStart,
+          onSubmit: ({required String appointmentStartIso}) {
+            return _appointmentsRepository.rescheduleAppointment(
+              appointmentId: appointmentId,
+              appointmentStartIso: appointmentStartIso,
+            );
+          },
+        ),
+      ),
+    );
+
+    if (result == true) {
+      await _loadAppointments();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Vizitas perkeltas')));
+    }
+  }
+
   Widget _buildFiltersSection() {
     if (_isLoadingFilters) {
       return const Padding(
@@ -401,6 +492,7 @@ class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
           itemBuilder: (context, index) {
             final appointment = _appointments[index];
 
+            final appointmentId = appointment['id'] as int;
             final clientName =
                 appointment['client_full_name']?.toString() ?? '-';
             final appointmentStart =
@@ -408,6 +500,7 @@ class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
             final appointmentEnd =
                 appointment['appointment_end']?.toString() ?? '';
             final status = appointment['status']?.toString() ?? '-';
+            final isActive = appointment['is_active'] as bool? ?? false;
             final businessId = appointment['business_id'] as int?;
             final specialistId = appointment['specialist_id'] as int?;
             final serviceId = appointment['service_id']?.toString() ?? '-';
@@ -421,12 +514,50 @@ class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      clientName,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            clientName,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        PopupMenuButton<String>(
+                          onSelected: (value) {
+                            if (value == 'confirmed') {
+                              _changeStatus(
+                                appointmentId: appointmentId,
+                                status: 'confirmed',
+                              );
+                            } else if (value == 'cancelled_by_admin') {
+                              _cancelAppointment(appointmentId: appointmentId);
+                            } else if (value == 'reschedule') {
+                              _openReschedulePage(appointment);
+                            }
+                          },
+                          itemBuilder: (_) => [
+                            if (isActive)
+                              const PopupMenuItem(
+                                value: 'confirmed',
+                                child: Text('Pažymėti kaip confirmed'),
+                              ),
+                            if (isActive)
+                              const PopupMenuItem(
+                                value: 'reschedule',
+                                child: Text('Perkelti laiką'),
+                              ),
+                            if (isActive)
+                              const PopupMenuItem(
+                                value: 'cancelled_by_admin',
+                                child: Text('Atšaukti vizitą'),
+                              ),
+                          ],
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -434,6 +565,8 @@ class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
                     ),
                     const SizedBox(height: 4),
                     Text('Statusas: $status'),
+                    const SizedBox(height: 4),
+                    Text('Aktyvus: ${isActive ? 'Taip' : 'Ne'}'),
                     const SizedBox(height: 4),
                     Text('Verslas: ${_businessNameById(businessId)}'),
                     const SizedBox(height: 4),

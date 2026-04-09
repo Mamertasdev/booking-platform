@@ -75,4 +75,53 @@ class AppointmentsApi {
 
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
+
+  Future<Map<String, dynamic>> updateAppointmentStatus({
+    required int appointmentId,
+    required String status,
+  }) async {
+    final response = await _apiClient.put(
+      '/api/appointments/$appointmentId/status',
+      authenticated: true,
+      body: {'status': status},
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update appointment status: ${response.body}');
+    }
+
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> cancelAppointment({
+    required int appointmentId,
+  }) async {
+    final response = await _apiClient.put(
+      '/api/appointments/$appointmentId/cancel',
+      authenticated: true,
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to cancel appointment: ${response.body}');
+    }
+
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> rescheduleAppointment({
+    required int appointmentId,
+    required String appointmentStartIso,
+  }) async {
+    final response = await _apiClient.put(
+      '/api/appointments/$appointmentId/reschedule',
+      authenticated: true,
+      body: {'appointment_start': appointmentStartIso},
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to reschedule appointment: ${response.body}');
+    }
+
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
 }

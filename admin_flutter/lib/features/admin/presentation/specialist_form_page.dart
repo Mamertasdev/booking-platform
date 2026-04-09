@@ -216,7 +216,7 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
         child: Column(
           children: [
             DropdownButtonFormField<int>(
-              value: _selectedBusinessId,
+              initialValue: _selectedBusinessId,
               decoration: const InputDecoration(
                 labelText: 'Verslas',
                 border: OutlineInputBorder(),
@@ -274,7 +274,7 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _selectedRole,
+              initialValue: _selectedRole,
               decoration: const InputDecoration(
                 labelText: 'Rolė',
                 border: OutlineInputBorder(),

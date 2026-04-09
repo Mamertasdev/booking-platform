@@ -49,4 +49,30 @@ class AppointmentsRepository {
       appointmentStartIso: appointmentStartIso,
     );
   }
+
+  Future<Map<String, dynamic>> updateAppointmentStatus({
+    required int appointmentId,
+    required String status,
+  }) async {
+    return _appointmentsApi.updateAppointmentStatus(
+      appointmentId: appointmentId,
+      status: status,
+    );
+  }
+
+  Future<Map<String, dynamic>> cancelAppointment({
+    required int appointmentId,
+  }) async {
+    return _appointmentsApi.cancelAppointment(appointmentId: appointmentId);
+  }
+
+  Future<Map<String, dynamic>> rescheduleAppointment({
+    required int appointmentId,
+    required String appointmentStartIso,
+  }) async {
+    return _appointmentsApi.rescheduleAppointment(
+      appointmentId: appointmentId,
+      appointmentStartIso: appointmentStartIso,
+    );
+  }
 }
