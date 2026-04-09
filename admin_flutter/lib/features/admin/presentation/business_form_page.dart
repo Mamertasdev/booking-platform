@@ -1,9 +1,18 @@
 import 'package:flutter/material.dart';
 
 class BusinessFormPage extends StatefulWidget {
-  const BusinessFormPage({super.key, required this.onSubmit});
+  const BusinessFormPage({
+    super.key,
+    required this.onSubmit,
+    this.initialData,
+    this.title = 'Verslas',
+  });
 
-  final Future<void> Function({required String name}) onSubmit;
+  final Future<void> Function({required String name, required bool isActive})
+  onSubmit;
+
+  final Map<String, dynamic>? initialData;
+  final String title;
 
   @override
   State<BusinessFormPage> createState() => _BusinessFormPageState();
@@ -11,10 +20,22 @@ class BusinessFormPage extends StatefulWidget {
 
 class _BusinessFormPageState extends State<BusinessFormPage> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
+  late final TextEditingController _nameController;
 
+  bool _isActive = true;
   bool _isLoading = false;
   String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+
+    final initialData = widget.initialData;
+    _nameController = TextEditingController(
+      text: initialData?['name']?.toString() ?? '',
+    );
+    _isActive = initialData?['is_active'] as bool? ?? true;
+  }
 
   @override
   void dispose() {
@@ -33,6 +54,10 @@ class _BusinessFormPageState extends State<BusinessFormPage> {
       return 'Verslo pavadinimas per trumpas';
     }
 
+    if (text.length > 100) {
+      return 'Verslo pavadinimas per ilgas';
+    }
+
     return null;
   }
 
@@ -48,7 +73,10 @@ class _BusinessFormPageState extends State<BusinessFormPage> {
     });
 
     try {
-      await widget.onSubmit(name: _nameController.text.trim());
+      await widget.onSubmit(
+        name: _nameController.text.trim(),
+        isActive: _isActive,
+      );
 
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -56,7 +84,7 @@ class _BusinessFormPageState extends State<BusinessFormPage> {
       if (!mounted) return;
 
       setState(() {
-        _errorText = 'Nepavyko sukurti verslo';
+        _errorText = 'Nepavyko išsaugoti verslo';
       });
     } finally {
       if (mounted) {
@@ -69,8 +97,10 @@ class _BusinessFormPageState extends State<BusinessFormPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isEditMode = widget.initialData != null;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Naujas verslas')),
+      appBar: AppBar(title: Text(widget.title)),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -86,6 +116,21 @@ class _BusinessFormPageState extends State<BusinessFormPage> {
                   ),
                   validator: _validateName,
                 ),
+                if (isEditMode) ...[
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    value: _isActive,
+                    onChanged: _isLoading
+                        ? null
+                        : (value) {
+                            setState(() {
+                              _isActive = value;
+                            });
+                          },
+                    title: const Text('Aktyvus verslas'),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ],
                 if (_errorText != null) ...[
                   const SizedBox(height: 12),
                   Text(_errorText!, style: const TextStyle(color: Colors.red)),
@@ -102,7 +147,7 @@ class _BusinessFormPageState extends State<BusinessFormPage> {
                             height: 22,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Text('Sukurti verslą'),
+                        : Text(isEditMode ? 'Išsaugoti' : 'Sukurti'),
                   ),
                 ),
               ],

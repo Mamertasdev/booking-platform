@@ -4,9 +4,26 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_active_user, require_admin, get_db
 from app.core.security import hash_password
 from app.models.specialist import Specialist
-from app.schemas.specialist import SpecialistCreate, SpecialistResponse
+from app.schemas.specialist import (
+    SpecialistCreate,
+    SpecialistResponse,
+    SpecialistUpdate,
+)
 
 router = APIRouter()
+
+
+def count_other_active_admins(
+    db: Session,
+    specialist_id_to_exclude: int,
+) -> int:
+    return (
+        db.query(Specialist)
+        .filter(Specialist.role == "admin")
+        .filter(Specialist.is_active == True)
+        .filter(Specialist.id != specialist_id_to_exclude)
+        .count()
+    )
 
 
 @router.get("/specialists", response_model=list[SpecialistResponse])
@@ -82,6 +99,78 @@ def create_specialist(
     return specialist
 
 
+@router.put("/specialists/{specialist_id}", response_model=SpecialistResponse)
+def update_specialist(
+    specialist_id: int,
+    payload: SpecialistUpdate,
+    current_user: Specialist = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    specialist = (
+        db.query(Specialist)
+        .filter(Specialist.id == specialist_id)
+        .first()
+    )
+
+    if not specialist:
+        raise HTTPException(status_code=404, detail="Specialist not found")
+
+    existing_user = (
+        db.query(Specialist)
+        .filter(Specialist.username == payload.username.strip())
+        .filter(Specialist.id != specialist_id)
+        .first()
+    )
+
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username already exists")
+
+    if current_user.id == specialist.id and not payload.is_active:
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot disable your own account",
+        )
+
+    if current_user.id == specialist.id and payload.role != "admin":
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot change your own admin role",
+        )
+
+    removing_admin_privileges = (
+        specialist.role == "admin"
+        and (
+            payload.role != "admin"
+            or not payload.is_active
+        )
+    )
+
+    if removing_admin_privileges:
+        other_active_admins = count_other_active_admins(
+            db=db,
+            specialist_id_to_exclude=specialist.id,
+        )
+
+        if other_active_admins == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot remove the last active admin",
+            )
+
+    specialist.business_id = payload.business_id
+    specialist.username = payload.username.strip()
+    specialist.full_name = payload.full_name.strip()
+    specialist.role = payload.role
+    specialist.is_active = payload.is_active
+
+    if payload.password is not None and payload.password.strip():
+        specialist.password_hash = hash_password(payload.password.strip())
+
+    db.commit()
+    db.refresh(specialist)
+    return specialist
+
+
 @router.put("/specialists/{specialist_id}/disable", response_model=SpecialistResponse)
 def disable_specialist(
     specialist_id: int,
@@ -96,6 +185,24 @@ def disable_specialist(
 
     if not specialist:
         raise HTTPException(status_code=404, detail="Specialist not found")
+
+    if current_user.id == specialist.id:
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot disable your own account",
+        )
+
+    if specialist.role == "admin":
+        other_active_admins = count_other_active_admins(
+            db=db,
+            specialist_id_to_exclude=specialist.id,
+        )
+
+        if other_active_admins == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot disable the last active admin",
+            )
 
     specialist.is_active = False
 

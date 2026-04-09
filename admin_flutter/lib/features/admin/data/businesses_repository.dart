@@ -16,6 +16,18 @@ class BusinessesRepository {
     return _businessesApi.createBusiness(name: name);
   }
 
+  Future<Map<String, dynamic>> updateBusiness({
+    required int businessId,
+    required String name,
+    required bool isActive,
+  }) {
+    return _businessesApi.updateBusiness(
+      businessId: businessId,
+      name: name,
+      isActive: isActive,
+    );
+  }
+
   Future<Map<String, dynamic>> disableBusiness({required int businessId}) {
     return _businessesApi.disableBusiness(businessId: businessId);
   }

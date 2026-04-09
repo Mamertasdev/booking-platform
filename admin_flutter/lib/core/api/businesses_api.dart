@@ -39,6 +39,24 @@ class BusinessesApi {
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> updateBusiness({
+    required int businessId,
+    required String name,
+    required bool isActive,
+  }) async {
+    final response = await _apiClient.put(
+      '/api/businesses/$businessId',
+      authenticated: true,
+      body: {'name': name, 'is_active': isActive},
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update business: ${response.body}');
+    }
+
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> disableBusiness({
     required int businessId,
   }) async {

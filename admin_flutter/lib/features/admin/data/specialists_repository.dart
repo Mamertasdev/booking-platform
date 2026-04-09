@@ -32,6 +32,26 @@ class SpecialistsRepository {
     );
   }
 
+  Future<Map<String, dynamic>> updateSpecialist({
+    required int specialistId,
+    required int businessId,
+    required String username,
+    String? password,
+    required String fullName,
+    required String role,
+    required bool isActive,
+  }) {
+    return _specialistsApi.updateSpecialist(
+      specialistId: specialistId,
+      businessId: businessId,
+      username: username,
+      password: password,
+      fullName: fullName,
+      role: role,
+      isActive: isActive,
+    );
+  }
+
   Future<Map<String, dynamic>> disableSpecialist({required int specialistId}) {
     return _specialistsApi.disableSpecialist(specialistId: specialistId);
   }

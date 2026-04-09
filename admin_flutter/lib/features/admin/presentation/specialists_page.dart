@@ -73,20 +73,58 @@ class _SpecialistsPageState extends State<SpecialistsPage> {
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => SpecialistFormPage(
+          title: 'Naujas vartotojas',
           onSubmit:
               ({
                 required int businessId,
                 required String username,
-                required String password,
+                String? password,
                 required String fullName,
                 required String role,
+                required bool isActive,
               }) {
                 return _specialistsRepository.createSpecialist(
+                  businessId: businessId,
+                  username: username,
+                  password: password ?? '',
+                  fullName: fullName,
+                  role: role,
+                );
+              },
+        ),
+      ),
+    );
+
+    if (result == true) {
+      await _loadSpecialists();
+    }
+  }
+
+  Future<void> _openEditPage(Map<String, dynamic> specialist) async {
+    final specialistId = specialist['id'] as int;
+
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => SpecialistFormPage(
+          title: 'Redaguoti vartotoją',
+          initialData: specialist,
+          onSubmit:
+              ({
+                required int businessId,
+                required String username,
+                String? password,
+                required String fullName,
+                required String role,
+                required bool isActive,
+              }) {
+                return _specialistsRepository.updateSpecialist(
+                  specialistId: specialistId,
                   businessId: businessId,
                   username: username,
                   password: password,
                   fullName: fullName,
                   role: role,
+                  isActive: isActive,
                 );
               },
         ),
@@ -113,12 +151,12 @@ class _SpecialistsPageState extends State<SpecialistsPage> {
       ).showSnackBar(const SnackBar(content: Text('Vartotojas išjungtas')));
 
       await _loadSpecialists();
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nepavyko išjungti vartotojo')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -184,11 +222,14 @@ class _SpecialistsPageState extends State<SpecialistsPage> {
               isThreeLine: true,
               trailing: PopupMenuButton<String>(
                 onSelected: (value) {
-                  if (value == 'disable') {
+                  if (value == 'edit') {
+                    _openEditPage(specialist);
+                  } else if (value == 'disable') {
                     _disableSpecialist(specialist);
                   }
                 },
                 itemBuilder: (_) => [
+                  const PopupMenuItem(value: 'edit', child: Text('Redaguoti')),
                   if (isActive)
                     const PopupMenuItem(
                       value: 'disable',

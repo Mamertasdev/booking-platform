@@ -64,6 +64,35 @@ class SpecialistsApi {
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> updateSpecialist({
+    required int specialistId,
+    required int businessId,
+    required String username,
+    String? password,
+    required String fullName,
+    required String role,
+    required bool isActive,
+  }) async {
+    final response = await _apiClient.put(
+      '/api/specialists/$specialistId',
+      authenticated: true,
+      body: {
+        'business_id': businessId,
+        'username': username,
+        'password': password,
+        'full_name': fullName,
+        'role': role,
+        'is_active': isActive,
+      },
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update specialist: ${response.body}');
+    }
+
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> disableSpecialist({
     required int specialistId,
   }) async {

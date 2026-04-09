@@ -71,8 +71,33 @@ class _BusinessesPageState extends State<BusinessesPage> {
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => BusinessFormPage(
-          onSubmit: ({required String name}) {
+          title: 'Naujas verslas',
+          onSubmit: ({required String name, required bool isActive}) {
             return _businessesRepository.createBusiness(name: name);
+          },
+        ),
+      ),
+    );
+
+    if (result == true) {
+      await _loadBusinesses();
+    }
+  }
+
+  Future<void> _openEditPage(Map<String, dynamic> business) async {
+    final businessId = business['id'] as int;
+
+    final result = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => BusinessFormPage(
+          title: 'Redaguoti verslą',
+          initialData: business,
+          onSubmit: ({required String name, required bool isActive}) {
+            return _businessesRepository.updateBusiness(
+              businessId: businessId,
+              name: name,
+              isActive: isActive,
+            );
           },
         ),
       ),
@@ -162,11 +187,14 @@ class _BusinessesPageState extends State<BusinessesPage> {
               subtitle: Text('ID: $businessId'),
               trailing: PopupMenuButton<String>(
                 onSelected: (value) {
-                  if (value == 'disable') {
+                  if (value == 'edit') {
+                    _openEditPage(business);
+                  } else if (value == 'disable') {
                     _disableBusiness(business);
                   }
                 },
                 itemBuilder: (_) => [
+                  const PopupMenuItem(value: 'edit', child: Text('Redaguoti')),
                   if (isActive)
                     const PopupMenuItem(
                       value: 'disable',

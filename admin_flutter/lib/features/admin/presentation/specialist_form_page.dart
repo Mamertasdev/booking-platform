@@ -6,16 +6,25 @@ import '../../../core/storage/token_storage.dart';
 import '../data/businesses_repository.dart';
 
 class SpecialistFormPage extends StatefulWidget {
-  const SpecialistFormPage({super.key, required this.onSubmit});
+  const SpecialistFormPage({
+    super.key,
+    required this.onSubmit,
+    this.initialData,
+    this.title = 'Vartotojas',
+  });
 
   final Future<void> Function({
     required int businessId,
     required String username,
-    required String password,
+    String? password,
     required String fullName,
     required String role,
+    required bool isActive,
   })
   onSubmit;
+
+  final Map<String, dynamic>? initialData;
+  final String title;
 
   @override
   State<SpecialistFormPage> createState() => _SpecialistFormPageState();
@@ -32,14 +41,26 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
 
   String _selectedRole = 'specialist';
   int? _selectedBusinessId;
+  bool _isActive = true;
   bool _isLoading = false;
   bool _isLoadingBusinesses = true;
   String? _errorText;
   List<Map<String, dynamic>> _businesses = [];
 
+  bool get _isEditMode => widget.initialData != null;
+
   @override
   void initState() {
     super.initState();
+
+    final initialData = widget.initialData;
+    if (initialData != null) {
+      _usernameController.text = initialData['username']?.toString() ?? '';
+      _fullNameController.text = initialData['full_name']?.toString() ?? '';
+      _selectedRole = initialData['role']?.toString() ?? 'specialist';
+      _selectedBusinessId = initialData['business_id'] as int?;
+      _isActive = initialData['is_active'] as bool? ?? true;
+    }
 
     final tokenStorage = TokenStorage();
     final apiClient = ApiClient(
@@ -76,7 +97,8 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
 
       setState(() {
         _businesses = data;
-        if (_businesses.isNotEmpty) {
+
+        if (_selectedBusinessId == null && _businesses.isNotEmpty) {
           _selectedBusinessId = _businesses.first['id'] as int;
         }
       });
@@ -114,21 +136,24 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
     });
 
     try {
+      final password = _passwordController.text.trim();
+
       await widget.onSubmit(
         businessId: _selectedBusinessId!,
         username: _usernameController.text.trim(),
-        password: _passwordController.text,
+        password: password.isEmpty ? null : password,
         fullName: _fullNameController.text.trim(),
         role: _selectedRole,
+        isActive: _isActive,
       );
 
       if (!mounted) return;
       Navigator.of(context).pop(true);
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
 
       setState(() {
-        _errorText = 'Nepavyko sukurti vartotojo';
+        _errorText = e.toString();
       });
     } finally {
       if (mounted) {
@@ -150,18 +175,26 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
       return 'Prisijungimo vardas per trumpas';
     }
 
+    if (text.length > 50) {
+      return 'Prisijungimo vardas per ilgas';
+    }
+
     return null;
   }
 
   String? _validatePassword(String? value) {
-    final text = value ?? '';
+    final text = value?.trim() ?? '';
 
-    if (text.isEmpty) {
+    if (!_isEditMode && text.isEmpty) {
       return 'Įveskite slaptažodį';
     }
 
-    if (text.length < 4) {
+    if (text.isNotEmpty && text.length < 4) {
       return 'Slaptažodis per trumpas';
+    }
+
+    if (text.length > 100) {
+      return 'Slaptažodis per ilgas';
     }
 
     return null;
@@ -176,6 +209,10 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
 
     if (text.length < 2) {
       return 'Pilnas vardas per trumpas';
+    }
+
+    if (text.length > 100) {
+      return 'Pilnas vardas per ilgas';
     }
 
     return null;
@@ -266,9 +303,11 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
             TextFormField(
               controller: _passwordController,
               obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Slaptažodis',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: _isEditMode
+                    ? 'Naujas slaptažodis (nebūtina)'
+                    : 'Slaptažodis',
+                border: const OutlineInputBorder(),
               ),
               validator: _validatePassword,
             ),
@@ -295,6 +334,21 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
                       });
                     },
             ),
+            if (_isEditMode) ...[
+              const SizedBox(height: 12),
+              SwitchListTile(
+                value: _isActive,
+                onChanged: _isLoading
+                    ? null
+                    : (value) {
+                        setState(() {
+                          _isActive = value;
+                        });
+                      },
+                title: const Text('Aktyvus vartotojas'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ],
             if (_errorText != null) ...[
               const SizedBox(height: 12),
               Text(_errorText!, style: const TextStyle(color: Colors.red)),
@@ -311,7 +365,7 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
                         height: 22,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('Sukurti vartotoją'),
+                    : Text(_isEditMode ? 'Išsaugoti' : 'Sukurti vartotoją'),
               ),
             ),
           ],
@@ -323,7 +377,7 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Naujas vartotojas')),
+      appBar: AppBar(title: Text(widget.title)),
       body: SafeArea(child: _buildBody()),
     );
   }
