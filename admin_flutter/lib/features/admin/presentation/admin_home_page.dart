@@ -6,6 +6,8 @@ import '../../../core/auth/auth_repository.dart';
 import '../../../core/storage/token_storage.dart';
 import '../../auth/presentation/login_page.dart';
 import 'admin_appointments_page.dart';
+import 'admin_availability_exceptions_page.dart';
+import 'admin_working_hours_page.dart';
 import 'businesses_page.dart';
 import 'specialists_page.dart';
 
@@ -30,6 +32,20 @@ class AdminHomePage extends StatelessWidget {
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => const AdminAppointmentsPage()));
+  }
+
+  void _openWorkingHours(BuildContext context) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const AdminWorkingHoursPage()));
+  }
+
+  void _openAvailabilityExceptions(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const AdminAvailabilityExceptionsPage(),
+      ),
+    );
   }
 
   Future<void> _logout(BuildContext context) async {
@@ -106,6 +122,24 @@ class AdminHomePage extends StatelessWidget {
                         'Peržiūrėti visas rezervacijas su filtrais',
                       ),
                       onTap: () => _openAppointments(context),
+                    ),
+                  ),
+                  Card(
+                    child: ListTile(
+                      title: const Text('Darbo laikai'),
+                      subtitle: const Text(
+                        'Peržiūrėti ir valdyti specialistų darbo laikus',
+                      ),
+                      onTap: () => _openWorkingHours(context),
+                    ),
+                  ),
+                  Card(
+                    child: ListTile(
+                      title: const Text('Išimtys'),
+                      subtitle: const Text(
+                        'Peržiūrėti ir valdyti specialistų išimtis',
+                      ),
+                      onTap: () => _openAvailabilityExceptions(context),
                     ),
                   ),
                 ],
