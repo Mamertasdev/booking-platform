@@ -16,6 +16,21 @@ class AdminHomePage extends StatelessWidget {
 
   final Map<String, dynamic> user;
 
+  bool get _isAdmin =>
+      (user['role']?.toString().toLowerCase() ?? '') == 'admin';
+  bool get _isOwner =>
+      (user['role']?.toString().toLowerCase() ?? '') == 'owner';
+
+  String get _pageTitle {
+    if (_isOwner) return 'Verslo valdymas';
+    return 'Admin';
+  }
+
+  String get _userLabel {
+    if (_isOwner) return 'Prisijungęs verslo savininkas';
+    return 'Prisijungęs admin';
+  }
+
   void _openBusinesses(BuildContext context) {
     Navigator.of(
       context,
@@ -77,7 +92,7 @@ class AdminHomePage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Admin'),
+        title: Text(_pageTitle),
         actions: [
           IconButton(
             onPressed: () => _logout(context),
@@ -91,7 +106,7 @@ class AdminHomePage extends StatelessWidget {
           children: [
             Card(
               child: ListTile(
-                title: const Text('Prisijungęs admin'),
+                title: Text(_userLabel),
                 subtitle: Text('$fullName'),
               ),
             ),
@@ -99,18 +114,21 @@ class AdminHomePage extends StatelessWidget {
             Expanded(
               child: ListView(
                 children: [
-                  Card(
-                    child: ListTile(
-                      title: const Text('Verslai'),
-                      subtitle: const Text('Peržiūrėti ir kurti verslus'),
-                      onTap: () => _openBusinesses(context),
+                  if (_isAdmin)
+                    Card(
+                      child: ListTile(
+                        title: const Text('Verslai'),
+                        subtitle: const Text('Peržiūrėti ir kurti verslus'),
+                        onTap: () => _openBusinesses(context),
+                      ),
                     ),
-                  ),
                   Card(
                     child: ListTile(
                       title: const Text('Vartotojai'),
-                      subtitle: const Text(
-                        'Peržiūrėti ir kurti admin bei specialistų vartotojus',
+                      subtitle: Text(
+                        _isOwner
+                            ? 'Peržiūrėti ir valdyti savo verslo specialistus'
+                            : 'Peržiūrėti ir kurti admin, owner bei specialistų vartotojus',
                       ),
                       onTap: () => _openSpecialists(context),
                     ),
@@ -118,8 +136,10 @@ class AdminHomePage extends StatelessWidget {
                   Card(
                     child: ListTile(
                       title: const Text('Rezervacijos'),
-                      subtitle: const Text(
-                        'Peržiūrėti visas rezervacijas su filtrais',
+                      subtitle: Text(
+                        _isOwner
+                            ? 'Peržiūrėti savo verslo rezervacijas'
+                            : 'Peržiūrėti visas rezervacijas su filtrais',
                       ),
                       onTap: () => _openAppointments(context),
                     ),
@@ -127,8 +147,10 @@ class AdminHomePage extends StatelessWidget {
                   Card(
                     child: ListTile(
                       title: const Text('Darbo laikai'),
-                      subtitle: const Text(
-                        'Peržiūrėti ir valdyti specialistų darbo laikus',
+                      subtitle: Text(
+                        _isOwner
+                            ? 'Peržiūrėti ir valdyti savo verslo darbo laikus'
+                            : 'Peržiūrėti ir valdyti specialistų darbo laikus',
                       ),
                       onTap: () => _openWorkingHours(context),
                     ),
@@ -136,8 +158,10 @@ class AdminHomePage extends StatelessWidget {
                   Card(
                     child: ListTile(
                       title: const Text('Išimtys'),
-                      subtitle: const Text(
-                        'Peržiūrėti ir valdyti specialistų išimtis',
+                      subtitle: Text(
+                        _isOwner
+                            ? 'Peržiūrėti ir valdyti savo verslo išimtis'
+                            : 'Peržiūrėti ir valdyti specialistų išimtis',
                       ),
                       onTap: () => _openAvailabilityExceptions(context),
                     ),

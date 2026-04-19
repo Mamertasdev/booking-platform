@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/api/auth_api.dart';
 import '../../../core/api/specialists_api.dart';
+import '../../../core/auth/auth_repository.dart';
 import '../../../core/storage/token_storage.dart';
 import '../data/specialists_repository.dart';
 import 'specialist_form_page.dart';
@@ -15,10 +17,16 @@ class SpecialistsPage extends StatefulWidget {
 
 class _SpecialistsPageState extends State<SpecialistsPage> {
   late final SpecialistsRepository _specialistsRepository;
+  late final AuthRepository _authRepository;
 
   bool _isLoading = true;
+  bool _hasAccess = false;
   String? _errorText;
+  String _currentRole = '';
   List<Map<String, dynamic>> _specialists = [];
+
+  bool get _isAdmin => _currentRole == 'admin';
+  bool get _isOwner => _currentRole == 'owner';
 
   @override
   void initState() {
@@ -30,12 +38,55 @@ class _SpecialistsPageState extends State<SpecialistsPage> {
       tokenStorage: tokenStorage,
     );
     final specialistsApi = SpecialistsApi(apiClient);
+    final authApi = AuthApi(apiClient);
 
     _specialistsRepository = SpecialistsRepository(
       specialistsApi: specialistsApi,
     );
+    _authRepository = AuthRepository(
+      authApi: authApi,
+      tokenStorage: tokenStorage,
+    );
 
-    _loadSpecialists();
+    _initPage();
+  }
+
+  Future<void> _initPage() async {
+    setState(() {
+      _isLoading = true;
+      _errorText = null;
+    });
+
+    try {
+      final user = await _authRepository.getCurrentUser();
+      final role = (user['role']?.toString().toLowerCase() ?? '');
+
+      if (role != 'admin' && role != 'owner') {
+        if (!mounted) return;
+        setState(() {
+          _currentRole = role;
+          _hasAccess = false;
+          _isLoading = false;
+        });
+        return;
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _currentRole = role;
+        _hasAccess = true;
+      });
+
+      await _loadSpecialists();
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorText = 'Nepavyko patikrinti vartotojo teisių';
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _loadSpecialists() async {
@@ -73,7 +124,7 @@ class _SpecialistsPageState extends State<SpecialistsPage> {
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => SpecialistFormPage(
-          title: 'Naujas vartotojas',
+          title: _isOwner ? 'Naujas specialistas' : 'Naujas vartotojas',
           onSubmit:
               ({
                 required int businessId,
@@ -160,9 +211,36 @@ class _SpecialistsPageState extends State<SpecialistsPage> {
     }
   }
 
+  String _pageTitle() {
+    if (_isOwner) {
+      return 'Mano verslo vartotojai';
+    }
+    return 'Vartotojai';
+  }
+
+  String _pageDescription() {
+    if (_isOwner) {
+      return 'Matote tik savo verslo savininką ir specialistus';
+    }
+    return 'Matote visus sistemos vartotojus';
+  }
+
   Widget _buildContent() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
+    }
+
+    if (!_hasAccess) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Neturite prieigos prie vartotojų valdymo.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 16),
+          ),
+        ),
+      );
     }
 
     if (_errorText != null) {
@@ -179,7 +257,7 @@ class _SpecialistsPageState extends State<SpecialistsPage> {
               ),
               const SizedBox(height: 12),
               ElevatedButton(
-                onPressed: _loadSpecialists,
+                onPressed: _initPage,
                 child: const Text('Bandyti dar kartą'),
               ),
             ],
@@ -198,10 +276,19 @@ class _SpecialistsPageState extends State<SpecialistsPage> {
       onRefresh: _loadSpecialists,
       child: ListView.separated(
         padding: const EdgeInsets.all(16),
-        itemCount: _specialists.length,
+        itemCount: _specialists.length + 1,
         separatorBuilder: (_, _) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
-          final specialist = _specialists[index];
+          if (index == 0) {
+            return Card(
+              child: ListTile(
+                title: Text(_pageTitle()),
+                subtitle: Text(_pageDescription()),
+              ),
+            );
+          }
+
+          final specialist = _specialists[index - 1];
 
           final fullName = specialist['full_name']?.toString() ?? '-';
           final username = specialist['username']?.toString() ?? '-';
@@ -217,9 +304,11 @@ class _SpecialistsPageState extends State<SpecialistsPage> {
               ),
               title: Text(fullName),
               subtitle: Text(
-                'Username: $username\nRolė: $role\nBusiness ID: $businessId',
+                _isOwner
+                    ? 'Username: $username\nRolė: $role'
+                    : 'Username: $username\nRolė: $role\nBusiness ID: $businessId',
               ),
-              isThreeLine: true,
+              isThreeLine: !_isOwner,
               trailing: PopupMenuButton<String>(
                 onSelected: (value) {
                   if (value == 'edit') {
@@ -247,11 +336,13 @@ class _SpecialistsPageState extends State<SpecialistsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Vartotojai')),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _openCreatePage,
-        child: const Icon(Icons.add),
-      ),
+      appBar: AppBar(title: Text(_pageTitle())),
+      floatingActionButton: _hasAccess
+          ? FloatingActionButton(
+              onPressed: _openCreatePage,
+              child: const Icon(Icons.add),
+            )
+          : null,
       body: _buildContent(),
     );
   }

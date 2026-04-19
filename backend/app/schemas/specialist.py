@@ -1,6 +1,10 @@
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel, field_validator
+
+
+ALLOWED_ROLES = {"admin", "owner", "specialist"}
 
 
 class SpecialistLogin(BaseModel):
@@ -29,7 +33,7 @@ class SpecialistLogin(BaseModel):
 
 
 class SpecialistCreate(BaseModel):
-    business_id: int
+    business_id: Optional[int] = None
     username: str
     password: str
     full_name: str
@@ -77,14 +81,14 @@ class SpecialistCreate(BaseModel):
     def validate_role(cls, v: str):
         v = v.strip().lower()
 
-        if v not in {"admin", "specialist"}:
-            raise ValueError("Role must be admin or specialist")
+        if v not in ALLOWED_ROLES:
+            raise ValueError("Role must be admin, owner or specialist")
 
         return v
 
 
 class SpecialistUpdate(BaseModel):
-    business_id: int
+    business_id: Optional[int] = None
     username: str
     password: str | None = None
     full_name: str
@@ -141,15 +145,15 @@ class SpecialistUpdate(BaseModel):
     def validate_role(cls, v: str):
         v = v.strip().lower()
 
-        if v not in {"admin", "specialist"}:
-            raise ValueError("Role must be admin or specialist")
+        if v not in ALLOWED_ROLES:
+            raise ValueError("Role must be admin, owner or specialist")
 
         return v
 
 
 class SpecialistResponse(BaseModel):
     id: int
-    business_id: int
+    business_id: Optional[int] = None
     username: str
     full_name: str
     role: str

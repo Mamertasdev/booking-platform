@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/api/auth_api.dart';
 import '../../../core/api/businesses_api.dart';
+import '../../../core/auth/auth_repository.dart';
 import '../../../core/storage/token_storage.dart';
 import '../data/businesses_repository.dart';
 
@@ -38,6 +40,7 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
   final _fullNameController = TextEditingController();
 
   late final BusinessesRepository _businessesRepository;
+  late final AuthRepository _authRepository;
 
   String _selectedRole = 'specialist';
   int? _selectedBusinessId;
@@ -45,9 +48,24 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
   bool _isLoading = false;
   bool _isLoadingBusinesses = true;
   String? _errorText;
+  String _currentUserRole = '';
+  int? _currentUserBusinessId;
   List<Map<String, dynamic>> _businesses = [];
 
   bool get _isEditMode => widget.initialData != null;
+  bool get _isAdmin => _currentUserRole == 'admin';
+  bool get _isOwner => _currentUserRole == 'owner';
+
+  bool get _lockBusinessSelection => _isOwner;
+  bool get _lockRoleSelection => _isOwner;
+
+  List<String> get _allowedRoles {
+    if (_isOwner) {
+      return const ['specialist'];
+    }
+
+    return const ['specialist', 'owner', 'admin'];
+  }
 
   @override
   void initState() {
@@ -68,10 +86,15 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
       tokenStorage: tokenStorage,
     );
     final businessesApi = BusinessesApi(apiClient);
+    final authApi = AuthApi(apiClient);
 
     _businessesRepository = BusinessesRepository(businessesApi: businessesApi);
+    _authRepository = AuthRepository(
+      authApi: authApi,
+      tokenStorage: tokenStorage,
+    );
 
-    _loadBusinesses();
+    _initPage();
   }
 
   @override
@@ -80,6 +103,35 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
     _passwordController.dispose();
     _fullNameController.dispose();
     super.dispose();
+  }
+
+  Future<void> _initPage() async {
+    setState(() {
+      _isLoadingBusinesses = true;
+      _errorText = null;
+    });
+
+    try {
+      final user = await _authRepository.getCurrentUser();
+      final role = (user['role']?.toString().toLowerCase() ?? '');
+      final businessId = user['business_id'] as int?;
+
+      if (!mounted) return;
+
+      setState(() {
+        _currentUserRole = role;
+        _currentUserBusinessId = businessId;
+      });
+
+      await _loadBusinesses();
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorText = 'Nepavyko užkrauti vartotojo duomenų';
+        _isLoadingBusinesses = false;
+      });
+    }
   }
 
   Future<void> _loadBusinesses() async {
@@ -95,12 +147,28 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
 
       if (!mounted) return;
 
-      setState(() {
-        _businesses = data;
+      List<Map<String, dynamic>> businesses = data;
 
-        if (_selectedBusinessId == null && _businesses.isNotEmpty) {
-          _selectedBusinessId = _businesses.first['id'] as int;
-        }
+      if (_isOwner) {
+        businesses = data.where((business) {
+          return business['id'] == _currentUserBusinessId;
+        }).toList();
+      }
+
+      String selectedRole = _selectedRole;
+      int? selectedBusinessId = _selectedBusinessId;
+
+      if (_isOwner) {
+        selectedRole = 'specialist';
+        selectedBusinessId = _currentUserBusinessId;
+      } else if (selectedBusinessId == null && businesses.isNotEmpty) {
+        selectedBusinessId = businesses.first['id'] as int;
+      }
+
+      setState(() {
+        _businesses = businesses;
+        _selectedRole = selectedRole;
+        _selectedBusinessId = selectedBusinessId;
       });
     } catch (_) {
       if (!mounted) return;
@@ -137,13 +205,14 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
 
     try {
       final password = _passwordController.text.trim();
+      final roleToSubmit = _isOwner ? 'specialist' : _selectedRole;
 
       await widget.onSubmit(
         businessId: _selectedBusinessId!,
         username: _usernameController.text.trim(),
         password: password.isEmpty ? null : password,
         fullName: _fullNameController.text.trim(),
-        role: _selectedRole,
+        role: roleToSubmit,
         isActive: _isActive,
       );
 
@@ -218,9 +287,43 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
     return null;
   }
 
+  String _roleLabel(String role) {
+    switch (role) {
+      case 'admin':
+        return 'Admin';
+      case 'owner':
+        return 'Verslo savininkas';
+      default:
+        return 'Specialistas';
+    }
+  }
+
   Widget _buildBody() {
     if (_isLoadingBusinesses) {
       return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_errorText != null && _businesses.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _errorText!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.red, fontSize: 16),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: _initPage,
+                child: const Text('Bandyti dar kartą'),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     if (_businesses.isEmpty) {
@@ -237,7 +340,7 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
               ),
               const SizedBox(height: 12),
               ElevatedButton(
-                onPressed: _loadBusinesses,
+                onPressed: _initPage,
                 child: const Text('Bandyti dar kartą'),
               ),
             ],
@@ -267,7 +370,7 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
                   child: Text(name),
                 );
               }).toList(),
-              onChanged: _isLoading
+              onChanged: (_isLoading || _lockBusinessSelection)
                   ? null
                   : (value) {
                       setState(() {
@@ -313,19 +416,20 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              initialValue: _selectedRole,
+              initialValue: _allowedRoles.contains(_selectedRole)
+                  ? _selectedRole
+                  : _allowedRoles.first,
               decoration: const InputDecoration(
                 labelText: 'Rolė',
                 border: OutlineInputBorder(),
               ),
-              items: const [
-                DropdownMenuItem(
-                  value: 'specialist',
-                  child: Text('Specialistas'),
-                ),
-                DropdownMenuItem(value: 'admin', child: Text('Admin')),
-              ],
-              onChanged: _isLoading
+              items: _allowedRoles.map((role) {
+                return DropdownMenuItem<String>(
+                  value: role,
+                  child: Text(_roleLabel(role)),
+                );
+              }).toList(),
+              onChanged: (_isLoading || _lockRoleSelection)
                   ? null
                   : (value) {
                       if (value == null) return;
@@ -347,6 +451,16 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
                       },
                 title: const Text('Aktyvus vartotojas'),
                 contentPadding: EdgeInsets.zero,
+              ),
+            ],
+            if (_isOwner) ...[
+              const SizedBox(height: 8),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Verslo savininkas gali kurti ir redaguoti tik savo verslo specialistus.',
+                  style: TextStyle(fontSize: 13, color: Colors.black54),
+                ),
               ),
             ],
             if (_errorText != null) ...[

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/api/auth_api.dart';
 import '../../../core/api/businesses_api.dart';
+import '../../../core/auth/auth_repository.dart';
 import '../../../core/storage/token_storage.dart';
 import '../data/businesses_repository.dart';
 import 'business_form_page.dart';
@@ -15,8 +17,10 @@ class BusinessesPage extends StatefulWidget {
 
 class _BusinessesPageState extends State<BusinessesPage> {
   late final BusinessesRepository _businessesRepository;
+  late final AuthRepository _authRepository;
 
   bool _isLoading = true;
+  bool _hasAccess = false;
   String? _errorText;
   List<Map<String, dynamic>> _businesses = [];
 
@@ -30,10 +34,46 @@ class _BusinessesPageState extends State<BusinessesPage> {
       tokenStorage: tokenStorage,
     );
     final businessesApi = BusinessesApi(apiClient);
+    final authApi = AuthApi(apiClient);
 
     _businessesRepository = BusinessesRepository(businessesApi: businessesApi);
+    _authRepository = AuthRepository(
+      authApi: authApi,
+      tokenStorage: tokenStorage,
+    );
 
-    _loadBusinesses();
+    _initPage();
+  }
+
+  Future<void> _initPage() async {
+    setState(() {
+      _isLoading = true;
+      _errorText = null;
+    });
+
+    try {
+      final user = await _authRepository.getCurrentUser();
+      final role = (user['role']?.toString().toLowerCase() ?? '');
+
+      if (role != 'admin') {
+        if (!mounted) return;
+        setState(() {
+          _hasAccess = false;
+          _isLoading = false;
+        });
+        return;
+      }
+
+      _hasAccess = true;
+      await _loadBusinesses();
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorText = 'Nepavyko patikrinti vartotojo teisių';
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _loadBusinesses() async {
@@ -135,6 +175,19 @@ class _BusinessesPageState extends State<BusinessesPage> {
       return const Center(child: CircularProgressIndicator());
     }
 
+    if (!_hasAccess) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Neturite prieigos prie verslų valdymo.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 16),
+          ),
+        ),
+      );
+    }
+
     if (_errorText != null) {
       return Center(
         child: Padding(
@@ -149,7 +202,7 @@ class _BusinessesPageState extends State<BusinessesPage> {
               ),
               const SizedBox(height: 12),
               ElevatedButton(
-                onPressed: _loadBusinesses,
+                onPressed: _initPage,
                 child: const Text('Bandyti dar kartą'),
               ),
             ],
@@ -213,10 +266,12 @@ class _BusinessesPageState extends State<BusinessesPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Verslai')),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _openCreatePage,
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: _hasAccess
+          ? FloatingActionButton(
+              onPressed: _openCreatePage,
+              child: const Icon(Icons.add),
+            )
+          : null,
       body: _buildContent(),
     );
   }

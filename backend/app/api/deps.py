@@ -8,6 +8,10 @@ from app.models.specialist import Specialist
 
 bearer_scheme = HTTPBearer()
 
+ROLE_ADMIN = "admin"
+ROLE_OWNER = "owner"
+ROLE_SPECIALIST = "specialist"
+
 
 def get_db():
     db = SessionLocal()
@@ -69,10 +73,34 @@ def get_current_active_user(
 def require_admin(
     current_user: Specialist = Depends(get_current_active_user),
 ):
-    if current_user.role != "admin":
+    if current_user.role != ROLE_ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required",
+        )
+
+    return current_user
+
+
+def require_owner_or_admin(
+    current_user: Specialist = Depends(get_current_active_user),
+):
+    if current_user.role not in {ROLE_ADMIN, ROLE_OWNER}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Owner or admin access required",
+        )
+
+    return current_user
+
+
+def require_specialist_owner_or_admin(
+    current_user: Specialist = Depends(get_current_active_user),
+):
+    if current_user.role not in {ROLE_ADMIN, ROLE_OWNER, ROLE_SPECIALIST}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Authenticated access required",
         )
 
     return current_user

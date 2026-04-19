@@ -49,18 +49,25 @@ class _SplashPageState extends State<SplashPage> {
       return;
     }
 
-    final role = user['role'] as String?;
+    final role = (user['role'] as String? ?? '').toLowerCase();
 
-    if (role == 'admin') {
+    if (role == 'admin' || role == 'owner') {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => AdminHomePage(user: user)),
       );
       return;
     }
 
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => SpecialistHomePage(user: user)),
-    );
+    if (role == 'specialist') {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => SpecialistHomePage(user: user)),
+      );
+      return;
+    }
+
+    Navigator.of(
+      context,
+    ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginPage()));
   }
 
   @override
