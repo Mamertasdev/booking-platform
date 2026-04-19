@@ -1,20 +1,56 @@
-# Python
-__pycache__/
-*.pyc
-venv/
-.env
-
-# Flutter
-.dart_tool/
-.build/
-
-# Node
-node_modules/
-
-# IDE
+# --------------------
+# OS / IDE
+# --------------------
+.DS_Store
+Thumbs.db
 .vscode/
 .idea/
 
-# OS
-.DS_Store
-Thumbs.db
+# --------------------
+# Python / Backend
+# --------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+venv/
+.env
+.env.*
+
+# DB
+*.db
+*.sqlite3
+
+# Logs
+*.log
+
+# --------------------
+# Flutter
+# --------------------
+.dart_tool/
+.build/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+
+# Android / iOS build
+android/.gradle/
+android/app/build/
+ios/Pods/
+ios/Runner.xcworkspace/
+
+# --------------------
+# Node / Next.js
+# --------------------
+node_modules/
+.next/
+out/
+dist/
+
+# --------------------
+# Misc
+# --------------------
+coverage/
+tmp/
