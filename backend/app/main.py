@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -16,27 +18,38 @@ from app.api.working_hour import router as working_hour_router
 from app.core.settings import settings
 from app.database.init_db import init_db
 
+
+def _get_cors_origins() -> list[str]:
+    cors_origins = getattr(settings, "CORS_ORIGINS", None)
+
+    if cors_origins:
+        return cors_origins
+
+    return [
+        "http://localhost:3000",
+        "http://100.80.21.21:3000",
+    ]
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
+
 app = FastAPI(
     title=settings.APP_NAME,
-    version="0.1"
+    version="0.1",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://100.80.21.21:3000",
-    ],
+    allow_origins=_get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-def startup():
-    init_db()
-
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(business_router, prefix="/api")
@@ -56,3 +69,8 @@ app.include_router(public_book_router, prefix="/public")
 @app.get("/")
 def root():
     return {"status": "running", "app": settings.APP_NAME}
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}

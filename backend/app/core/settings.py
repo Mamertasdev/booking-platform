@@ -25,6 +25,8 @@ class Settings:
         _get_env("ACCESS_TOKEN_EXPIRE_MINUTES", "60")
     )
 
+    DATABASE_URL: str = _get_env("DATABASE_URL", "sqlite:///./app.db")
+
     DEBUG: bool = ENV != "production"
 
 
