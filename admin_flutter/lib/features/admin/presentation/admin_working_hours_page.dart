@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/api/api_client.dart';
+import '../../../core/api/auth_api.dart';
 import '../../../core/api/businesses_api.dart';
 import '../../../core/api/specialists_api.dart';
 import '../../../core/api/working_hours_api.dart';
+import '../../../core/auth/auth_repository.dart';
 import '../../../core/storage/token_storage.dart';
 import '../../specialist/data/working_hours_repository.dart';
 import '../../specialist/presentation/working_hours/working_hour_form_page.dart';
@@ -21,9 +23,13 @@ class _AdminWorkingHoursPageState extends State<AdminWorkingHoursPage> {
   late final WorkingHoursRepository _workingHoursRepository;
   late final BusinessesRepository _businessesRepository;
   late final SpecialistsRepository _specialistsRepository;
+  late final AuthRepository _authRepository;
 
   bool _isLoadingFilters = true;
   bool _isLoadingItems = false;
+  bool _hasAccess = false;
+  String _currentRole = '';
+  int? _currentUserBusinessId;
   String? _errorText;
 
   List<Map<String, dynamic>> _businesses = [];
@@ -32,6 +38,9 @@ class _AdminWorkingHoursPageState extends State<AdminWorkingHoursPage> {
 
   int? _selectedBusinessId;
   int? _selectedSpecialistId;
+
+  bool get _isAdmin => _currentRole == 'admin';
+  bool get _isOwner => _currentRole == 'owner';
 
   @override
   void initState() {
@@ -51,6 +60,10 @@ class _AdminWorkingHoursPageState extends State<AdminWorkingHoursPage> {
     _specialistsRepository = SpecialistsRepository(
       specialistsApi: SpecialistsApi(apiClient),
     );
+    _authRepository = AuthRepository(
+      authApi: AuthApi(apiClient),
+      tokenStorage: TokenStorage(),
+    );
 
     _loadInitialData();
   }
@@ -62,6 +75,21 @@ class _AdminWorkingHoursPageState extends State<AdminWorkingHoursPage> {
     });
 
     try {
+      final user = await _authRepository.getCurrentUser();
+      final role = (user['role']?.toString().toLowerCase() ?? '');
+      final businessId = user['business_id'] as int?;
+
+      if (role != 'admin' && role != 'owner') {
+        if (!mounted) return;
+        setState(() {
+          _currentRole = role;
+          _currentUserBusinessId = businessId;
+          _hasAccess = false;
+          _isLoadingFilters = false;
+        });
+        return;
+      }
+
       final businesses = await _businessesRepository.getBusinesses(
         includeInactive: false,
       );
@@ -71,9 +99,29 @@ class _AdminWorkingHoursPageState extends State<AdminWorkingHoursPage> {
 
       if (!mounted) return;
 
+      List<Map<String, dynamic>> filteredBusinesses = businesses;
+      List<Map<String, dynamic>> filteredSpecialists = specialists;
+      int? selectedBusinessId = _selectedBusinessId;
+
+      if (role == 'owner') {
+        filteredBusinesses = businesses.where((business) {
+          return business['id'] == businessId;
+        }).toList();
+
+        filteredSpecialists = specialists.where((specialist) {
+          return specialist['business_id'] == businessId;
+        }).toList();
+
+        selectedBusinessId = businessId;
+      }
+
       setState(() {
-        _businesses = businesses;
-        _specialists = specialists;
+        _currentRole = role;
+        _currentUserBusinessId = businessId;
+        _hasAccess = true;
+        _businesses = filteredBusinesses;
+        _specialists = filteredSpecialists;
+        _selectedBusinessId = selectedBusinessId;
       });
 
       await _loadItems();
@@ -93,6 +141,13 @@ class _AdminWorkingHoursPageState extends State<AdminWorkingHoursPage> {
   }
 
   Future<void> _loadItems() async {
+    if (!_hasAccess) {
+      setState(() {
+        _isLoadingItems = false;
+      });
+      return;
+    }
+
     setState(() {
       _isLoadingItems = true;
       _errorText = null;
@@ -105,11 +160,15 @@ class _AdminWorkingHoursPageState extends State<AdminWorkingHoursPage> {
 
       if (!mounted) return;
 
+      final effectiveBusinessId = _isOwner
+          ? _currentUserBusinessId
+          : _selectedBusinessId;
+
       final filtered = allItems.where((item) {
         final businessId = item['business_id'] as int?;
         final specialistId = item['specialist_id'] as int?;
 
-        if (_selectedBusinessId != null && businessId != _selectedBusinessId) {
+        if (effectiveBusinessId != null && businessId != effectiveBusinessId) {
           return false;
         }
 
@@ -140,6 +199,10 @@ class _AdminWorkingHoursPageState extends State<AdminWorkingHoursPage> {
   }
 
   List<Map<String, dynamic>> get _filteredSpecialists {
+    if (_isOwner) {
+      return _specialists;
+    }
+
     if (_selectedBusinessId == null) {
       return _specialists;
     }
@@ -306,50 +369,72 @@ class _AdminWorkingHoursPageState extends State<AdminWorkingHoursPage> {
       );
     }
 
+    if (!_hasAccess) {
+      return const SizedBox.shrink();
+    }
+
     return Card(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
           children: [
-            DropdownButtonFormField<int?>(
-              initialValue: _selectedBusinessId,
-              decoration: const InputDecoration(
-                labelText: 'Verslas',
-                border: OutlineInputBorder(),
-              ),
-              items: [
-                const DropdownMenuItem<int?>(
-                  value: null,
-                  child: Text('Visi verslai'),
+            if (_isAdmin) ...[
+              DropdownButtonFormField<int?>(
+                initialValue: _selectedBusinessId,
+                decoration: const InputDecoration(
+                  labelText: 'Verslas',
+                  border: OutlineInputBorder(),
                 ),
-                ..._businesses.map((business) {
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('Visi verslai'),
+                  ),
+                  ..._businesses.map((business) {
+                    return DropdownMenuItem<int?>(
+                      value: business['id'] as int,
+                      child: Text(business['name']?.toString() ?? '-'),
+                    );
+                  }),
+                ],
+                onChanged: _isLoadingItems
+                    ? null
+                    : (value) async {
+                        setState(() {
+                          _selectedBusinessId = value;
+
+                          final specialistStillValid = _filteredSpecialists.any(
+                            (specialist) =>
+                                specialist['id'] == _selectedSpecialistId,
+                          );
+
+                          if (!specialistStillValid) {
+                            _selectedSpecialistId = null;
+                          }
+                        });
+
+                        await _loadItems();
+                      },
+              ),
+              const SizedBox(height: 12),
+            ] else if (_isOwner) ...[
+              DropdownButtonFormField<int?>(
+                initialValue: _selectedBusinessId,
+                decoration: const InputDecoration(
+                  labelText: 'Verslas',
+                  border: OutlineInputBorder(),
+                ),
+                items: _businesses.map((business) {
                   return DropdownMenuItem<int?>(
                     value: business['id'] as int,
                     child: Text(business['name']?.toString() ?? '-'),
                   );
-                }),
-              ],
-              onChanged: _isLoadingItems
-                  ? null
-                  : (value) async {
-                      setState(() {
-                        _selectedBusinessId = value;
-
-                        final specialistStillValid = _filteredSpecialists.any(
-                          (specialist) =>
-                              specialist['id'] == _selectedSpecialistId,
-                        );
-
-                        if (!specialistStillValid) {
-                          _selectedSpecialistId = null;
-                        }
-                      });
-
-                      await _loadItems();
-                    },
-            ),
-            const SizedBox(height: 12),
+                }).toList(),
+                onChanged: null,
+              ),
+              const SizedBox(height: 12),
+            ],
             DropdownButtonFormField<int?>(
               initialValue: _selectedSpecialistId,
               decoration: const InputDecoration(
@@ -390,6 +475,21 @@ class _AdminWorkingHoursPageState extends State<AdminWorkingHoursPage> {
   Widget _buildContent() {
     if (_isLoadingItems) {
       return const Expanded(child: Center(child: CircularProgressIndicator()));
+    }
+
+    if (!_hasAccess) {
+      return const Expanded(
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'Neturite prieigos prie darbo laikų valdymo.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16),
+            ),
+          ),
+        ),
+      );
     }
 
     if (_errorText != null) {
@@ -476,14 +576,18 @@ class _AdminWorkingHoursPageState extends State<AdminWorkingHoursPage> {
   @override
   Widget build(BuildContext context) {
     final canCreate =
-        _selectedBusinessId != null && _selectedSpecialistId != null;
+        _hasAccess &&
+        _selectedBusinessId != null &&
+        _selectedSpecialistId != null;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Darbo laikai')),
-      floatingActionButton: FloatingActionButton(
-        onPressed: canCreate ? _openCreatePage : null,
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: _hasAccess
+          ? FloatingActionButton(
+              onPressed: canCreate ? _openCreatePage : null,
+              child: const Icon(Icons.add),
+            )
+          : null,
       body: Column(children: [_buildFilters(), _buildContent()]),
     );
   }
