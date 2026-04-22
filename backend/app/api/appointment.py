@@ -4,7 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_active_user, get_db
+from app.api.deps import (
+    ROLE_ADMIN,
+    ROLE_OWNER,
+    ROLE_SPECIALIST,
+    get_current_active_user,
+    get_db,
+)
 from app.models.appointment import Appointment
 from app.models.service import Service
 from app.models.specialist import Specialist
@@ -27,17 +33,79 @@ from app.services.availability import (
 router = APIRouter()
 
 
+def _require_user_business_id(current_user: Specialist) -> int:
+    if current_user.business_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Current user is not assigned to a business",
+        )
+    return current_user.business_id
+
+
+def _normalize_appointment_scope(
+    *,
+    business_id: int | None,
+    specialist_id: int | None,
+    current_user: Specialist | None,
+) -> tuple[int | None, int | None]:
+    if current_user is None:
+        return business_id, specialist_id
+
+    if current_user.role == ROLE_ADMIN:
+        return business_id, specialist_id
+
+    if current_user.role == ROLE_OWNER:
+        owner_business_id = _require_user_business_id(current_user)
+        return owner_business_id, specialist_id
+
+    if current_user.role == ROLE_SPECIALIST:
+        specialist_business_id = _require_user_business_id(current_user)
+        return specialist_business_id, current_user.id
+
+    raise HTTPException(status_code=403, detail="Not allowed")
+
+
+def _ensure_can_access_appointment(
+    current_user: Specialist,
+    appointment: Appointment,
+):
+    if current_user.role == ROLE_ADMIN:
+        return
+
+    if current_user.role == ROLE_OWNER:
+        owner_business_id = _require_user_business_id(current_user)
+        if appointment.business_id != owner_business_id:
+            raise HTTPException(status_code=403, detail="Not allowed")
+        return
+
+    if current_user.role == ROLE_SPECIALIST:
+        specialist_business_id = _require_user_business_id(current_user)
+        if (
+            appointment.business_id != specialist_business_id
+            or appointment.specialist_id != current_user.id
+        ):
+            raise HTTPException(status_code=403, detail="Not allowed")
+        return
+
+    raise HTTPException(status_code=403, detail="Not allowed")
+
+
 def create_appointment_internal(
     payload: AppointmentCreate,
     db: Session,
     current_user: Specialist | None = None,
 ):
-    business_id = payload.business_id
-    specialist_id = payload.specialist_id
+    business_id, specialist_id = _normalize_appointment_scope(
+        business_id=payload.business_id,
+        specialist_id=payload.specialist_id,
+        current_user=current_user,
+    )
 
-    if current_user is not None and current_user.role != "admin":
-        business_id = current_user.business_id
-        specialist_id = current_user.id
+    if business_id is None:
+        raise HTTPException(status_code=400, detail="business_id is required")
+
+    if specialist_id is None:
+        raise HTTPException(status_code=400, detail="specialist_id is required")
 
     service = (
         db.query(Service)
@@ -166,11 +234,13 @@ def get_appointments(
     current_user: Specialist = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    query = db.query(Appointment).filter(Appointment.is_active == True)
+    business_id, specialist_id = _normalize_appointment_scope(
+        business_id=business_id,
+        specialist_id=specialist_id,
+        current_user=current_user,
+    )
 
-    if current_user.role != "admin":
-        business_id = current_user.business_id
-        specialist_id = current_user.id
+    query = db.query(Appointment).filter(Appointment.is_active == True)
 
     if business_id is not None:
         query = query.filter(Appointment.business_id == business_id)
@@ -203,13 +273,7 @@ def get_appointment(
     if not appointment:
         raise HTTPException(status_code=404, detail="Appointment not found")
 
-    if current_user.role != "admin":
-        if (
-            appointment.business_id != current_user.business_id
-            or appointment.specialist_id != current_user.id
-        ):
-            raise HTTPException(status_code=403, detail="Not allowed")
-
+    _ensure_can_access_appointment(current_user, appointment)
     return appointment
 
 
@@ -242,12 +306,7 @@ def update_appointment_status(
     if not appointment:
         raise HTTPException(status_code=404, detail="Appointment not found")
 
-    if current_user.role != "admin":
-        if (
-            appointment.business_id != current_user.business_id
-            or appointment.specialist_id != current_user.id
-        ):
-            raise HTTPException(status_code=403, detail="Not allowed")
+    _ensure_can_access_appointment(current_user, appointment)
 
     appointment.status = payload.status
 
@@ -271,12 +330,7 @@ def cancel_appointment(
     if not appointment:
         raise HTTPException(status_code=404, detail="Appointment not found")
 
-    if current_user.role != "admin":
-        if (
-            appointment.business_id != current_user.business_id
-            or appointment.specialist_id != current_user.id
-        ):
-            raise HTTPException(status_code=403, detail="Not allowed")
+    _ensure_can_access_appointment(current_user, appointment)
 
     appointment.status = "cancelled_by_admin"
     appointment.is_active = False
@@ -302,12 +356,7 @@ def reschedule_appointment(
     if not appointment:
         raise HTTPException(status_code=404, detail="Appointment not found")
 
-    if current_user.role != "admin":
-        if (
-            appointment.business_id != current_user.business_id
-            or appointment.specialist_id != current_user.id
-        ):
-            raise HTTPException(status_code=403, detail="Not allowed")
+    _ensure_can_access_appointment(current_user, appointment)
 
     service = (
         db.query(Service)
