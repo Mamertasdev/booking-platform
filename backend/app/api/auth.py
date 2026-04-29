@@ -13,7 +13,6 @@ router = APIRouter()
 @router.post("/auth/login", response_model=TokenResponse)
 def login(payload: SpecialistLogin, db: Session = Depends(get_db)):
     normalized_username = payload.username.strip()
-    print("LOGIN ATTEMPT:", repr(normalized_username))
 
     user = (
         db.query(Specialist)
@@ -21,15 +20,11 @@ def login(payload: SpecialistLogin, db: Session = Depends(get_db)):
         .first()
     )
 
-    print("USER FOUND:", user is not None)
-
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
         )
-
-    print("USER ACTIVE:", user.is_active)
 
     if not user.is_active:
         raise HTTPException(
@@ -38,7 +33,6 @@ def login(payload: SpecialistLogin, db: Session = Depends(get_db)):
         )
 
     password_ok = verify_password(payload.password, user.password_hash)
-    print("PASSWORD OK:", password_ok)
 
     if not password_ok:
         raise HTTPException(
@@ -53,8 +47,6 @@ def login(payload: SpecialistLogin, db: Session = Depends(get_db)):
             "business_id": user.business_id,
         }
     )
-
-    print("LOGIN SUCCESS FOR USER ID:", user.id)
 
     return {
         "access_token": access_token,

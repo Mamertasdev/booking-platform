@@ -18,6 +18,7 @@ from app.schemas.appointment import (
     AppointmentCreate,
     AppointmentReschedule,
     AppointmentResponse,
+    AppointmentStatus,
     AppointmentUpdateStatus,
 )
 from app.services.availability import (
@@ -180,23 +181,24 @@ def create_appointment_internal(
             detail="Selected time slot is not available",
         )
 
-    existing_appointment = (
+    appointment_end = payload.appointment_start + timedelta(
+        minutes=service.duration_minutes
+    )
+
+    overlapping_appointment = (
         db.query(Appointment)
         .filter(Appointment.business_id == business_id)
         .filter(Appointment.specialist_id == specialist_id)
-        .filter(Appointment.appointment_start == payload.appointment_start)
         .filter(Appointment.is_active == True)
+        .filter(Appointment.appointment_start < appointment_end)
+        .filter(Appointment.appointment_end > payload.appointment_start)
         .first()
     )
 
-    if existing_appointment:
+    if overlapping_appointment:
         raise HTTPException(
             status_code=400,
             detail="Selected time slot is no longer available",
-        )
-
-    appointment_end = payload.appointment_start + timedelta(
-        minutes=service.duration_minutes
     )
 
     appointment = Appointment(
@@ -209,7 +211,7 @@ def create_appointment_internal(
         notes=payload.notes,
         appointment_start=payload.appointment_start,
         appointment_end=appointment_end,
-        status="confirmed",
+        status=AppointmentStatus.confirmed.value,
         is_active=True,
     )
 
@@ -232,7 +234,7 @@ def get_appointments(
     specialist_id: int | None = Query(default=None),
     target_date: date | None = Query(default=None),
     current_user: Specialist = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     business_id, specialist_id = _normalize_appointment_scope(
         business_id=business_id,
@@ -262,7 +264,7 @@ def get_appointments(
 def get_appointment(
     appointment_id: int,
     current_user: Specialist = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     appointment = (
         db.query(Appointment)
@@ -281,7 +283,7 @@ def get_appointment(
 def create_appointment(
     payload: AppointmentCreate,
     current_user: Specialist = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     return create_appointment_internal(
         payload=payload,
@@ -295,7 +297,7 @@ def update_appointment_status(
     appointment_id: int,
     payload: AppointmentUpdateStatus,
     current_user: Specialist = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     appointment = (
         db.query(Appointment)
@@ -308,7 +310,7 @@ def update_appointment_status(
 
     _ensure_can_access_appointment(current_user, appointment)
 
-    appointment.status = payload.status
+    appointment.status = payload.status.value
 
     db.commit()
     db.refresh(appointment)
@@ -319,7 +321,7 @@ def update_appointment_status(
 def cancel_appointment(
     appointment_id: int,
     current_user: Specialist = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     appointment = (
         db.query(Appointment)
@@ -332,7 +334,7 @@ def cancel_appointment(
 
     _ensure_can_access_appointment(current_user, appointment)
 
-    appointment.status = "cancelled_by_admin"
+    appointment.status = AppointmentStatus.cancelled_by_admin.value
     appointment.is_active = False
 
     db.commit()
@@ -345,7 +347,7 @@ def reschedule_appointment(
     appointment_id: int,
     payload: AppointmentReschedule,
     current_user: Specialist = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     appointment = (
         db.query(Appointment)
@@ -433,27 +435,30 @@ def reschedule_appointment(
             detail="Selected new time slot is not available",
         )
 
-    existing_appointment = (
+    new_appointment_end = payload.appointment_start + timedelta(
+        minutes=service.duration_minutes
+    )
+
+    overlapping_appointment = (
         db.query(Appointment)
         .filter(Appointment.business_id == appointment.business_id)
         .filter(Appointment.specialist_id == appointment.specialist_id)
-        .filter(Appointment.appointment_start == payload.appointment_start)
         .filter(Appointment.id != appointment.id)
         .filter(Appointment.is_active == True)
+        .filter(Appointment.appointment_start < new_appointment_end)
+        .filter(Appointment.appointment_end > payload.appointment_start)
         .first()
     )
 
-    if existing_appointment:
+    if overlapping_appointment:
         raise HTTPException(
             status_code=400,
             detail="Selected new time slot is no longer available",
         )
 
     appointment.appointment_start = payload.appointment_start
-    appointment.appointment_end = payload.appointment_start + timedelta(
-        minutes=service.duration_minutes
-    )
-    appointment.status = "confirmed"
+    appointment.appointment_end = new_appointment_end
+    appointment.status = AppointmentStatus.confirmed.value
     appointment.is_active = True
 
     try:
