@@ -213,7 +213,7 @@ class _WorkingHourFormPageState extends State<WorkingHourFormPage> {
             child: Column(
               children: [
                 DropdownButtonFormField<int>(
-                  value: _selectedWeekday,
+                  initialValue: _selectedWeekday,
                   decoration: const InputDecoration(
                     labelText: 'Savaitės diena',
                     border: OutlineInputBorder(),
