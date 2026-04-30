@@ -29,5 +29,24 @@ class Settings:
 
     DEBUG: bool = ENV != "production"
 
+    def __init__(self):
+        self._validate_security_settings()
+
+    def _validate_security_settings(self):
+        if self.ENV != "production":
+            return
+
+        secret_key = self.SECRET_KEY.strip()
+
+        if secret_key == "change-me":
+            raise RuntimeError(
+                "SECRET_KEY must be changed before running in production"
+            )
+
+        if len(secret_key) < 32:
+            raise RuntimeError(
+                "SECRET_KEY must be at least 32 characters in production"
+            )
+
 
 settings = Settings()
