@@ -7,7 +7,11 @@ type Specialist = {
 };
 
 export default async function HomePage() {
-  const specialists: Specialist[] = await fetchAPI("/public/specialists");
+  const businessId = 1;
+
+  const specialists: Specialist[] = await fetchAPI(
+    `/public/specialists?business_id=${businessId}`
+  );
 
   return (
     <main
