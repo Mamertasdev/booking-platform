@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../../core/api/api_client.dart';
 import '../../../../../core/api/appointments_api.dart';
+import '../../../../../core/config/app_config.dart';
 import '../../../../../core/storage/token_storage.dart';
 import '../data/appointments_repository.dart';
 import 'appointment_reschedule_slot_picker_page.dart';
@@ -26,7 +27,7 @@ class _MyAppointmentsPageState extends State<MyAppointmentsPage> {
 
     final tokenStorage = TokenStorage();
     final apiClient = ApiClient(
-      baseUrl: 'http://100.80.21.21:8000',
+      baseUrl: AppConfig.apiBaseUrl,
       tokenStorage: tokenStorage,
     );
     final appointmentsApi = AppointmentsApi(apiClient);
@@ -81,6 +82,73 @@ class _MyAppointmentsPageState extends State<MyAppointmentsPage> {
       return '$day.$month.$year $hour:$minute';
     } catch (_) {
       return value;
+    }
+  }
+
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'pending':
+        return 'Laukia patvirtinimo';
+      case 'confirmed':
+        return 'Patvirtintas';
+      case 'completed':
+        return 'Atliktas';
+      case 'no_show':
+        return 'Neatvyko';
+      case 'cancelled_by_admin':
+        return 'Atšauktas administratoriaus';
+      case 'cancelled_by_client':
+        return 'Atšauktas kliento';
+      default:
+        return status;
+    }
+  }
+
+  Future<void> _changeStatus({
+    required int appointmentId,
+    required String status,
+  }) async {
+    try {
+      await _appointmentsRepository.updateAppointmentStatus(
+        appointmentId: appointmentId,
+        status: status,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vizito statusas atnaujintas')),
+      );
+
+      await _loadAppointments();
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nepavyko atnaujinti statuso')),
+      );
+    }
+  }
+
+  Future<void> _cancelAppointment({required int appointmentId}) async {
+    try {
+      await _appointmentsRepository.cancelAppointment(
+        appointmentId: appointmentId,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Vizitas atšauktas')));
+
+      await _loadAppointments();
+    } catch (_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Nepavyko atšaukti vizito')));
     }
   }
 
@@ -169,8 +237,8 @@ class _MyAppointmentsPageState extends State<MyAppointmentsPage> {
         itemBuilder: (context, index) {
           final appointment = _appointments[index];
 
-          final clientName = appointment['client_full_name']?.toString() ?? '-';
           final appointmentId = appointment['id'] as int;
+          final clientName = appointment['client_full_name']?.toString() ?? '-';
           final appointmentStart =
               appointment['appointment_start']?.toString() ?? '';
           final appointmentEnd =
@@ -202,15 +270,52 @@ class _MyAppointmentsPageState extends State<MyAppointmentsPage> {
                       ),
                       PopupMenuButton<String>(
                         onSelected: (value) {
-                          if (value == 'reschedule') {
+                          if (value == 'confirmed') {
+                            _changeStatus(
+                              appointmentId: appointmentId,
+                              status: 'confirmed',
+                            );
+                          } else if (value == 'completed') {
+                            _changeStatus(
+                              appointmentId: appointmentId,
+                              status: 'completed',
+                            );
+                          } else if (value == 'no_show') {
+                            _changeStatus(
+                              appointmentId: appointmentId,
+                              status: 'no_show',
+                            );
+                          } else if (value == 'cancelled_by_admin') {
+                            _cancelAppointment(appointmentId: appointmentId);
+                          } else if (value == 'reschedule') {
                             _openReschedulePage(appointment);
                           }
                         },
                         itemBuilder: (_) => [
                           if (isActive)
                             const PopupMenuItem(
+                              value: 'confirmed',
+                              child: Text('Patvirtinti'),
+                            ),
+                          if (isActive)
+                            const PopupMenuItem(
+                              value: 'completed',
+                              child: Text('Pažymėti kaip atliktą'),
+                            ),
+                          if (isActive)
+                            const PopupMenuItem(
+                              value: 'no_show',
+                              child: Text('Pažymėti kaip neatvykusį'),
+                            ),
+                          if (isActive)
+                            const PopupMenuItem(
                               value: 'reschedule',
                               child: Text('Perkelti laiką'),
+                            ),
+                          if (isActive)
+                            const PopupMenuItem(
+                              value: 'cancelled_by_admin',
+                              child: Text('Atšaukti vizitą'),
                             ),
                         ],
                       ),
@@ -221,9 +326,7 @@ class _MyAppointmentsPageState extends State<MyAppointmentsPage> {
                     'Laikas: ${_formatDateTime(appointmentStart)} - ${_formatDateTime(appointmentEnd)}',
                   ),
                   const SizedBox(height: 4),
-                  Text('Statusas: $status'),
-                  const SizedBox(height: 4),
-                  Text('Vizito ID: $appointmentId'),
+                  Text('Statusas: ${_statusLabel(status)}'),
                   const SizedBox(height: 4),
                   Text('Paslaugos ID: $serviceId'),
                   if (email != null && email.isNotEmpty) ...[

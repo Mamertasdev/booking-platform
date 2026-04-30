@@ -4,6 +4,7 @@ import '../../../core/api/api_client.dart';
 import '../../../core/api/appointments_api.dart';
 import '../../../core/api/businesses_api.dart';
 import '../../../core/api/specialists_api.dart';
+import '../../../core/config/app_config.dart';
 import '../../../core/storage/token_storage.dart';
 import '../../specialist/presentation/appointments/data/appointments_repository.dart';
 import '../../specialist/presentation/appointments/presentation/appointment_reschedule_slot_picker_page.dart';
@@ -40,7 +41,7 @@ class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
 
     final tokenStorage = TokenStorage();
     final apiClient = ApiClient(
-      baseUrl: 'http://100.80.21.21:8000',
+      baseUrl: AppConfig.apiBaseUrl,
       tokenStorage: tokenStorage,
     );
 
@@ -85,6 +86,25 @@ class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
       return '$day.$month.$year $hour:$minute';
     } catch (_) {
       return value;
+    }
+  }
+
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'pending':
+        return 'Laukia patvirtinimo';
+      case 'confirmed':
+        return 'Patvirtintas';
+      case 'completed':
+        return 'Atliktas';
+      case 'no_show':
+        return 'Neatvyko';
+      case 'cancelled_by_admin':
+        return 'Atšauktas administratoriaus';
+      case 'cancelled_by_client':
+        return 'Atšauktas kliento';
+      default:
+        return status;
     }
   }
 
@@ -533,6 +553,16 @@ class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
                                 appointmentId: appointmentId,
                                 status: 'confirmed',
                               );
+                            } else if (value == 'completed') {
+                              _changeStatus(
+                                appointmentId: appointmentId,
+                                status: 'completed',
+                              );
+                            } else if (value == 'no_show') {
+                              _changeStatus(
+                                appointmentId: appointmentId,
+                                status: 'no_show',
+                              );
                             } else if (value == 'cancelled_by_admin') {
                               _cancelAppointment(appointmentId: appointmentId);
                             } else if (value == 'reschedule') {
@@ -543,7 +573,17 @@ class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
                             if (isActive)
                               const PopupMenuItem(
                                 value: 'confirmed',
-                                child: Text('Pažymėti kaip confirmed'),
+                                child: Text('Patvirtinti'),
+                              ),
+                            if (isActive)
+                              const PopupMenuItem(
+                                value: 'completed',
+                                child: Text('Pažymėti kaip atliktą'),
+                              ),
+                            if (isActive)
+                              const PopupMenuItem(
+                                value: 'no_show',
+                                child: Text('Pažymėti kaip neatvykusį'),
                               ),
                             if (isActive)
                               const PopupMenuItem(
@@ -564,7 +604,7 @@ class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
                       'Laikas: ${_formatDateTime(appointmentStart)} - ${_formatDateTime(appointmentEnd)}',
                     ),
                     const SizedBox(height: 4),
-                    Text('Statusas: $status'),
+                    Text('Statusas: ${_statusLabel(status)}'),
                     const SizedBox(height: 4),
                     Text('Aktyvus: ${isActive ? 'Taip' : 'Ne'}'),
                     const SizedBox(height: 4),
