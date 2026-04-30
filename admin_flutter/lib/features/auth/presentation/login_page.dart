@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/auth_api.dart';
 import '../../../core/auth/auth_repository.dart';
+import '../../../core/config/app_config.dart';
 import '../../../core/storage/token_storage.dart';
 import '../../admin/presentation/admin_home_page.dart';
+import '../../owner/presentation/owner_home_page.dart';
 import '../../specialist/presentation/specialist_home_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -29,7 +31,7 @@ class _LoginPageState extends State<LoginPage> {
 
     final tokenStorage = TokenStorage();
     final apiClient = ApiClient(
-      baseUrl: 'http://100.80.21.21:8000',
+      baseUrl: AppConfig.apiBaseUrl,
       tokenStorage: tokenStorage,
     );
     final authApi = AuthApi(apiClient);
@@ -72,9 +74,16 @@ class _LoginPageState extends State<LoginPage> {
 
       final role = (user['role'] as String? ?? '').toLowerCase();
 
-      if (role == 'admin' || role == 'owner') {
+      if (role == 'admin') {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => AdminHomePage(user: user)),
+        );
+        return;
+      }
+
+      if (role == 'owner') {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => OwnerHomePage(user: user)),
         );
         return;
       }

@@ -5,53 +5,39 @@ import '../../../core/api/auth_api.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/storage/token_storage.dart';
+import '../../admin/presentation/admin_appointments_page.dart';
+import '../../admin/presentation/admin_availability_exceptions_page.dart';
+import '../../admin/presentation/admin_working_hours_page.dart';
+import '../../admin/presentation/specialists_page.dart';
 import '../../auth/presentation/login_page.dart';
-import '../services/data/presentation/my_services_page.dart';
-import 'appointments/presentation/my_appointments_page.dart';
-import 'availability/specialist_availability_page.dart';
-import 'calendar/specialist_calendar_page.dart';
-import 'exceptions/my_availability_exceptions_page.dart';
-import 'working_hours/my_working_hours_page.dart';
 
-class SpecialistHomePage extends StatelessWidget {
-  const SpecialistHomePage({super.key, required this.user});
+class OwnerHomePage extends StatelessWidget {
+  const OwnerHomePage({super.key, required this.user});
 
   final Map<String, dynamic> user;
+
+  void _openSpecialists(BuildContext context) {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const SpecialistsPage()));
+  }
 
   void _openAppointments(BuildContext context) {
     Navigator.of(
       context,
-    ).push(MaterialPageRoute(builder: (_) => const MyAppointmentsPage()));
-  }
-
-  void _openServices(BuildContext context) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const MyServicesPage()));
+    ).push(MaterialPageRoute(builder: (_) => const AdminAppointmentsPage()));
   }
 
   void _openWorkingHours(BuildContext context) {
     Navigator.of(
       context,
-    ).push(MaterialPageRoute(builder: (_) => MyWorkingHoursPage(user: user)));
+    ).push(MaterialPageRoute(builder: (_) => const AdminWorkingHoursPage()));
   }
 
-  void _openCalendar(BuildContext context) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const SpecialistCalendarPage()));
-  }
-
-  void _openAvailability(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => SpecialistAvailabilityPage(user: user)),
-    );
-  }
-
-  void _openExceptions(BuildContext context) {
+  void _openAvailabilityExceptions(BuildContext context) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => MyAvailabilityExceptionsPage(user: user),
+        builder: (_) => const AdminAvailabilityExceptionsPage(),
       ),
     );
   }
@@ -85,7 +71,7 @@ class SpecialistHomePage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Specialistas'),
+        title: const Text('Verslo valdymas'),
         actions: [
           IconButton(
             onPressed: () => _logout(context),
@@ -99,7 +85,7 @@ class SpecialistHomePage extends StatelessWidget {
           children: [
             Card(
               child: ListTile(
-                title: const Text('Prisijungęs specialistas'),
+                title: const Text('Prisijungęs verslo savininkas'),
                 subtitle: Text('$fullName'),
               ),
             ),
@@ -109,23 +95,27 @@ class SpecialistHomePage extends StatelessWidget {
                 children: [
                   Card(
                     child: ListTile(
-                      title: const Text('Vizitai'),
-                      subtitle: const Text('Atidaryti specialisto vizitus'),
+                      title: const Text('Specialistai'),
+                      subtitle: const Text(
+                        'Peržiūrėti ir valdyti savo verslo specialistus',
+                      ),
+                      onTap: () => _openSpecialists(context),
+                    ),
+                  ),
+                  Card(
+                    child: ListTile(
+                      title: const Text('Rezervacijos'),
+                      subtitle: const Text(
+                        'Peržiūrėti savo verslo rezervacijas',
+                      ),
                       onTap: () => _openAppointments(context),
                     ),
                   ),
                   Card(
                     child: ListTile(
-                      title: const Text('Paslaugos'),
-                      subtitle: const Text('Atidaryti specialisto paslaugas'),
-                      onTap: () => _openServices(context),
-                    ),
-                  ),
-                  Card(
-                    child: ListTile(
-                      title: const Text('Darbo laikas'),
+                      title: const Text('Darbo laikai'),
                       subtitle: const Text(
-                        'Atidaryti specialisto darbo laikus',
+                        'Peržiūrėti ir valdyti savo verslo darbo laikus',
                       ),
                       onTap: () => _openWorkingHours(context),
                     ),
@@ -133,24 +123,10 @@ class SpecialistHomePage extends StatelessWidget {
                   Card(
                     child: ListTile(
                       title: const Text('Išimtys'),
-                      subtitle: const Text('Valdyti darbo grafiko išimtis'),
-                      onTap: () => _openExceptions(context),
-                    ),
-                  ),
-                  Card(
-                    child: ListTile(
-                      title: const Text('Kalendorius'),
-                      subtitle: const Text('Peržiūrėti dienos užimtumą'),
-                      onTap: () => _openCalendar(context),
-                    ),
-                  ),
-                  Card(
-                    child: ListTile(
-                      title: const Text('Laisvi laikai'),
                       subtitle: const Text(
-                        'Peržiūrėti galimus rezervacijos slotus',
+                        'Peržiūrėti ir valdyti savo verslo išimtis',
                       ),
-                      onTap: () => _openAvailability(context),
+                      onTap: () => _openAvailabilityExceptions(context),
                     ),
                   ),
                 ],
