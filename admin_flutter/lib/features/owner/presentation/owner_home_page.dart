@@ -5,11 +5,11 @@ import '../../../core/api/auth_api.dart';
 import '../../../core/auth/auth_repository.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/storage/token_storage.dart';
-import '../../admin/presentation/admin_appointments_page.dart';
 import '../../admin/presentation/admin_availability_exceptions_page.dart';
 import '../../admin/presentation/admin_working_hours_page.dart';
 import '../../admin/presentation/specialists_page.dart';
 import '../../auth/presentation/login_page.dart';
+import 'owner_appointments_page.dart';
 
 class OwnerHomePage extends StatelessWidget {
   const OwnerHomePage({super.key, required this.user});
@@ -25,7 +25,7 @@ class OwnerHomePage extends StatelessWidget {
   void _openAppointments(BuildContext context) {
     Navigator.of(
       context,
-    ).push(MaterialPageRoute(builder: (_) => const AdminAppointmentsPage()));
+    ).push(MaterialPageRoute(builder: (_) => const OwnerAppointmentsPage()));
   }
 
   void _openWorkingHours(BuildContext context) {
