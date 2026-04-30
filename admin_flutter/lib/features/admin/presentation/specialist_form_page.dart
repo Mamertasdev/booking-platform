@@ -4,6 +4,7 @@ import '../../../core/api/api_client.dart';
 import '../../../core/api/auth_api.dart';
 import '../../../core/api/businesses_api.dart';
 import '../../../core/auth/auth_repository.dart';
+import '../../../core/config/app_config.dart';
 import '../../../core/storage/token_storage.dart';
 import '../data/businesses_repository.dart';
 
@@ -47,25 +48,13 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
   bool _isActive = true;
   bool _isLoading = false;
   bool _isLoadingBusinesses = true;
+  bool _hasAccess = false;
   String? _errorText;
-  String _currentUserRole = '';
-  int? _currentUserBusinessId;
   List<Map<String, dynamic>> _businesses = [];
 
   bool get _isEditMode => widget.initialData != null;
-  bool get _isAdmin => _currentUserRole == 'admin';
-  bool get _isOwner => _currentUserRole == 'owner';
 
-  bool get _lockBusinessSelection => _isOwner;
-  bool get _lockRoleSelection => _isOwner;
-
-  List<String> get _allowedRoles {
-    if (_isOwner) {
-      return const ['specialist'];
-    }
-
-    return const ['specialist', 'owner', 'admin'];
-  }
+  static const List<String> _allowedRoles = ['specialist', 'owner', 'admin'];
 
   @override
   void initState() {
@@ -82,7 +71,7 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
 
     final tokenStorage = TokenStorage();
     final apiClient = ApiClient(
-      baseUrl: 'http://100.80.21.21:8000',
+      baseUrl: AppConfig.apiBaseUrl,
       tokenStorage: tokenStorage,
     );
     final businessesApi = BusinessesApi(apiClient);
@@ -113,14 +102,24 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
 
     try {
       final user = await _authRepository.getCurrentUser();
-      final role = (user['role']?.toString().toLowerCase() ?? '');
-      final businessId = user['business_id'] as int?;
+      final role = user['role']?.toString().toLowerCase() ?? '';
+
+      if (role != 'admin') {
+        if (!mounted) return;
+
+        setState(() {
+          _hasAccess = false;
+          _errorText = 'Neturite prieigos prie platformos vartotojų formos';
+          _isLoadingBusinesses = false;
+        });
+
+        return;
+      }
 
       if (!mounted) return;
 
       setState(() {
-        _currentUserRole = role;
-        _currentUserBusinessId = businessId;
+        _hasAccess = true;
       });
 
       await _loadBusinesses();
@@ -147,27 +146,14 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
 
       if (!mounted) return;
 
-      List<Map<String, dynamic>> businesses = data;
-
-      if (_isOwner) {
-        businesses = data.where((business) {
-          return business['id'] == _currentUserBusinessId;
-        }).toList();
-      }
-
-      String selectedRole = _selectedRole;
       int? selectedBusinessId = _selectedBusinessId;
 
-      if (_isOwner) {
-        selectedRole = 'specialist';
-        selectedBusinessId = _currentUserBusinessId;
-      } else if (selectedBusinessId == null && businesses.isNotEmpty) {
-        selectedBusinessId = businesses.first['id'] as int;
+      if (selectedBusinessId == null && data.isNotEmpty) {
+        selectedBusinessId = data.first['id'] as int;
       }
 
       setState(() {
-        _businesses = businesses;
-        _selectedRole = selectedRole;
+        _businesses = data;
         _selectedBusinessId = selectedBusinessId;
       });
     } catch (_) {
@@ -205,14 +191,13 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
 
     try {
       final password = _passwordController.text.trim();
-      final roleToSubmit = _isOwner ? 'specialist' : _selectedRole;
 
       await widget.onSubmit(
         businessId: _selectedBusinessId!,
         username: _usernameController.text.trim(),
         password: password.isEmpty ? null : password,
         fullName: _fullNameController.text.trim(),
-        role: roleToSubmit,
+        role: _selectedRole,
         isActive: _isActive,
       );
 
@@ -303,6 +288,19 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
       return const Center(child: CircularProgressIndicator());
     }
 
+    if (!_hasAccess) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            _errorText ?? 'Neturite prieigos prie platformos vartotojų formos.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 16),
+          ),
+        ),
+      );
+    }
+
     if (_errorText != null && _businesses.isEmpty) {
       return Center(
         child: Padding(
@@ -370,7 +368,7 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
                   child: Text(name),
                 );
               }).toList(),
-              onChanged: (_isLoading || _lockBusinessSelection)
+              onChanged: _isLoading
                   ? null
                   : (value) {
                       setState(() {
@@ -429,7 +427,7 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
                   child: Text(_roleLabel(role)),
                 );
               }).toList(),
-              onChanged: (_isLoading || _lockRoleSelection)
+              onChanged: _isLoading
                   ? null
                   : (value) {
                       if (value == null) return;
@@ -451,16 +449,6 @@ class _SpecialistFormPageState extends State<SpecialistFormPage> {
                       },
                 title: const Text('Aktyvus vartotojas'),
                 contentPadding: EdgeInsets.zero,
-              ),
-            ],
-            if (_isOwner) ...[
-              const SizedBox(height: 8),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Verslo savininkas gali kurti ir redaguoti tik savo verslo specialistus.',
-                  style: TextStyle(fontSize: 13, color: Colors.black54),
-                ),
               ),
             ],
             if (_errorText != null) ...[

@@ -4,6 +4,7 @@ import '../../../core/api/api_client.dart';
 import '../../../core/api/auth_api.dart';
 import '../../../core/api/specialists_api.dart';
 import '../../../core/auth/auth_repository.dart';
+import '../../../core/config/app_config.dart';
 import '../../../core/storage/token_storage.dart';
 import '../data/specialists_repository.dart';
 import 'specialist_form_page.dart';
@@ -22,11 +23,7 @@ class _SpecialistsPageState extends State<SpecialistsPage> {
   bool _isLoading = true;
   bool _hasAccess = false;
   String? _errorText;
-  String _currentRole = '';
   List<Map<String, dynamic>> _specialists = [];
-
-  bool get _isAdmin => _currentRole == 'admin';
-  bool get _isOwner => _currentRole == 'owner';
 
   @override
   void initState() {
@@ -34,7 +31,7 @@ class _SpecialistsPageState extends State<SpecialistsPage> {
 
     final tokenStorage = TokenStorage();
     final apiClient = ApiClient(
-      baseUrl: 'http://100.80.21.21:8000',
+      baseUrl: AppConfig.apiBaseUrl,
       tokenStorage: tokenStorage,
     );
     final specialistsApi = SpecialistsApi(apiClient);
@@ -59,22 +56,22 @@ class _SpecialistsPageState extends State<SpecialistsPage> {
 
     try {
       final user = await _authRepository.getCurrentUser();
-      final role = (user['role']?.toString().toLowerCase() ?? '');
+      final role = user['role']?.toString().toLowerCase() ?? '';
 
-      if (role != 'admin' && role != 'owner') {
+      if (role != 'admin') {
         if (!mounted) return;
+
         setState(() {
-          _currentRole = role;
           _hasAccess = false;
           _isLoading = false;
         });
+
         return;
       }
 
       if (!mounted) return;
 
       setState(() {
-        _currentRole = role;
         _hasAccess = true;
       });
 
@@ -124,7 +121,7 @@ class _SpecialistsPageState extends State<SpecialistsPage> {
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => SpecialistFormPage(
-          title: _isOwner ? 'Naujas specialistas' : 'Naujas vartotojas',
+          title: 'Naujas vartotojas',
           onSubmit:
               ({
                 required int businessId,
@@ -211,20 +208,6 @@ class _SpecialistsPageState extends State<SpecialistsPage> {
     }
   }
 
-  String _pageTitle() {
-    if (_isOwner) {
-      return 'Mano verslo vartotojai';
-    }
-    return 'Vartotojai';
-  }
-
-  String _pageDescription() {
-    if (_isOwner) {
-      return 'Matote tik savo verslo savininką ir specialistus';
-    }
-    return 'Matote visus sistemos vartotojus';
-  }
-
   Widget _buildContent() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -235,7 +218,7 @@ class _SpecialistsPageState extends State<SpecialistsPage> {
         child: Padding(
           padding: EdgeInsets.all(24),
           child: Text(
-            'Neturite prieigos prie vartotojų valdymo.',
+            'Neturite prieigos prie platformos vartotojų valdymo.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 16),
           ),
@@ -280,10 +263,10 @@ class _SpecialistsPageState extends State<SpecialistsPage> {
         separatorBuilder: (_, _) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
           if (index == 0) {
-            return Card(
+            return const Card(
               child: ListTile(
-                title: Text(_pageTitle()),
-                subtitle: Text(_pageDescription()),
+                title: Text('Vartotojai'),
+                subtitle: Text('Matote visus sistemos vartotojus'),
               ),
             );
           }
@@ -304,11 +287,9 @@ class _SpecialistsPageState extends State<SpecialistsPage> {
               ),
               title: Text(fullName),
               subtitle: Text(
-                _isOwner
-                    ? 'Username: $username\nRolė: $role'
-                    : 'Username: $username\nRolė: $role\nBusiness ID: $businessId',
+                'Username: $username\nRolė: $role\nBusiness ID: $businessId',
               ),
-              isThreeLine: !_isOwner,
+              isThreeLine: true,
               trailing: PopupMenuButton<String>(
                 onSelected: (value) {
                   if (value == 'edit') {
@@ -336,7 +317,7 @@ class _SpecialistsPageState extends State<SpecialistsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_pageTitle())),
+      appBar: AppBar(title: const Text('Vartotojai')),
       floatingActionButton: _hasAccess
           ? FloatingActionButton(
               onPressed: _openCreatePage,
