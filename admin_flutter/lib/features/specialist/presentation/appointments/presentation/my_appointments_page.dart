@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../../../../core/api/api_client.dart';
 import '../../../../../core/api/appointments_api.dart';
+import '../../../../../core/api/services_api.dart';
 import '../../../../../core/config/app_config.dart';
 import '../../../../../core/storage/token_storage.dart';
+import '../../../../specialist/services/data/services_repository.dart';
 import '../data/appointments_repository.dart';
 import 'appointment_reschedule_slot_picker_page.dart';
 
@@ -16,10 +18,12 @@ class MyAppointmentsPage extends StatefulWidget {
 
 class _MyAppointmentsPageState extends State<MyAppointmentsPage> {
   late final AppointmentsRepository _appointmentsRepository;
+  late final ServicesRepository _servicesRepository;
 
   bool _isLoading = true;
   String? _errorText;
   List<Map<String, dynamic>> _appointments = [];
+  List<Map<String, dynamic>> _services = [];
 
   @override
   void initState() {
@@ -31,12 +35,48 @@ class _MyAppointmentsPageState extends State<MyAppointmentsPage> {
       tokenStorage: tokenStorage,
     );
     final appointmentsApi = AppointmentsApi(apiClient);
+    final servicesApi = ServicesApi(apiClient);
 
     _appointmentsRepository = AppointmentsRepository(
       appointmentsApi: appointmentsApi,
     );
+    _servicesRepository = ServicesRepository(servicesApi: servicesApi);
 
-    _loadAppointments();
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    setState(() {
+      _isLoading = true;
+      _errorText = null;
+    });
+
+    try {
+      final services = await _servicesRepository.getServices(
+        includeInactive: true,
+      );
+
+      final appointments = await _appointmentsRepository.getMyAppointments();
+
+      if (!mounted) return;
+
+      setState(() {
+        _services = services;
+        _appointments = appointments;
+      });
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorText = 'Nepavyko užkrauti vizitų';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   Future<void> _loadAppointments() async {
@@ -102,6 +142,18 @@ class _MyAppointmentsPageState extends State<MyAppointmentsPage> {
       default:
         return status;
     }
+  }
+
+  String _serviceNameById(int? serviceId) {
+    if (serviceId == null) return '-';
+
+    for (final service in _services) {
+      if (service['id'] == serviceId) {
+        return service['name']?.toString() ?? 'ID $serviceId';
+      }
+    }
+
+    return 'ID $serviceId';
   }
 
   Future<void> _changeStatus({
@@ -213,7 +265,7 @@ class _MyAppointmentsPageState extends State<MyAppointmentsPage> {
               ),
               const SizedBox(height: 12),
               ElevatedButton(
-                onPressed: _loadAppointments,
+                onPressed: _loadInitialData,
                 child: const Text('Bandyti dar kartą'),
               ),
             ],
@@ -244,7 +296,7 @@ class _MyAppointmentsPageState extends State<MyAppointmentsPage> {
           final appointmentEnd =
               appointment['appointment_end']?.toString() ?? '';
           final status = appointment['status']?.toString() ?? '-';
-          final serviceId = appointment['service_id']?.toString() ?? '-';
+          final serviceId = appointment['service_id'] as int?;
           final isActive = appointment['is_active'] as bool? ?? false;
           final email = appointment['client_email']?.toString();
           final phone = appointment['client_phone']?.toString();
@@ -328,7 +380,7 @@ class _MyAppointmentsPageState extends State<MyAppointmentsPage> {
                   const SizedBox(height: 4),
                   Text('Statusas: ${_statusLabel(status)}'),
                   const SizedBox(height: 4),
-                  Text('Paslaugos ID: $serviceId'),
+                  Text('Paslauga: ${_serviceNameById(serviceId)}'),
                   if (email != null && email.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text('El. paštas: $email'),

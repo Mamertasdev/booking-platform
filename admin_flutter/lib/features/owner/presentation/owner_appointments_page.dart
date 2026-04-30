@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/appointments_api.dart';
+import '../../../core/api/services_api.dart';
 import '../../../core/api/specialists_api.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/storage/token_storage.dart';
 import '../../admin/data/specialists_repository.dart';
 import '../../specialist/presentation/appointments/data/appointments_repository.dart';
 import '../../specialist/presentation/appointments/presentation/appointment_reschedule_slot_picker_page.dart';
+import '../../specialist/services/data/services_repository.dart';
 
 class OwnerAppointmentsPage extends StatefulWidget {
   const OwnerAppointmentsPage({super.key});
@@ -18,6 +20,7 @@ class OwnerAppointmentsPage extends StatefulWidget {
 
 class _OwnerAppointmentsPageState extends State<OwnerAppointmentsPage> {
   late final SpecialistsRepository _specialistsRepository;
+  late final ServicesRepository _servicesRepository;
   late final AppointmentsRepository _appointmentsRepository;
 
   bool _isLoadingFilters = true;
@@ -25,6 +28,7 @@ class _OwnerAppointmentsPageState extends State<OwnerAppointmentsPage> {
   String? _errorText;
 
   List<Map<String, dynamic>> _specialists = [];
+  List<Map<String, dynamic>> _services = [];
   List<Map<String, dynamic>> _appointments = [];
 
   int? _selectedSpecialistId;
@@ -42,6 +46,10 @@ class _OwnerAppointmentsPageState extends State<OwnerAppointmentsPage> {
 
     _specialistsRepository = SpecialistsRepository(
       specialistsApi: SpecialistsApi(apiClient),
+    );
+
+    _servicesRepository = ServicesRepository(
+      servicesApi: ServicesApi(apiClient),
     );
 
     _appointmentsRepository = AppointmentsRepository(
@@ -113,6 +121,18 @@ class _OwnerAppointmentsPageState extends State<OwnerAppointmentsPage> {
     return 'ID: $specialistId';
   }
 
+  String _serviceNameById(int? serviceId) {
+    if (serviceId == null) return '-';
+
+    for (final service in _services) {
+      if (service['id'] == serviceId) {
+        return service['name']?.toString() ?? 'ID $serviceId';
+      }
+    }
+
+    return 'ID $serviceId';
+  }
+
   Future<void> _loadInitialData() async {
     setState(() {
       _isLoadingFilters = true;
@@ -124,10 +144,15 @@ class _OwnerAppointmentsPageState extends State<OwnerAppointmentsPage> {
         includeInactive: true,
       );
 
+      final services = await _servicesRepository.getServices(
+        includeInactive: true,
+      );
+
       if (!mounted) return;
 
       setState(() {
         _specialists = specialists;
+        _services = services;
       });
 
       await _loadAppointments();
@@ -135,7 +160,7 @@ class _OwnerAppointmentsPageState extends State<OwnerAppointmentsPage> {
       if (!mounted) return;
 
       setState(() {
-        _errorText = 'Nepavyko užkrauti specialistų';
+        _errorText = 'Nepavyko užkrauti specialistų ir paslaugų';
       });
     } finally {
       if (mounted) {
@@ -449,7 +474,7 @@ class _OwnerAppointmentsPageState extends State<OwnerAppointmentsPage> {
             final status = appointment['status']?.toString() ?? '-';
             final isActive = appointment['is_active'] as bool? ?? false;
             final specialistId = appointment['specialist_id'] as int?;
-            final serviceId = appointment['service_id']?.toString() ?? '-';
+            final serviceId = appointment['service_id'] as int?;
             final email = appointment['client_email']?.toString();
             final phone = appointment['client_phone']?.toString();
             final notes = appointment['notes']?.toString();
@@ -534,7 +559,7 @@ class _OwnerAppointmentsPageState extends State<OwnerAppointmentsPage> {
                     const SizedBox(height: 4),
                     Text('Specialistas: ${_specialistNameById(specialistId)}'),
                     const SizedBox(height: 4),
-                    Text('Paslaugos ID: $serviceId'),
+                    Text('Paslauga: ${_serviceNameById(serviceId)}'),
                     if (email != null && email.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text('El. paštas: $email'),

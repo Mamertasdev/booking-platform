@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/appointments_api.dart';
 import '../../../core/api/businesses_api.dart';
+import '../../../core/api/services_api.dart';
 import '../../../core/api/specialists_api.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/storage/token_storage.dart';
 import '../../specialist/presentation/appointments/data/appointments_repository.dart';
 import '../../specialist/presentation/appointments/presentation/appointment_reschedule_slot_picker_page.dart';
+import '../../specialist/services/data/services_repository.dart';
 import '../data/businesses_repository.dart';
 import '../data/specialists_repository.dart';
 
@@ -21,6 +23,7 @@ class AdminAppointmentsPage extends StatefulWidget {
 class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
   late final BusinessesRepository _businessesRepository;
   late final SpecialistsRepository _specialistsRepository;
+  late final ServicesRepository _servicesRepository;
   late final AppointmentsRepository _appointmentsRepository;
 
   bool _isLoadingFilters = true;
@@ -29,6 +32,7 @@ class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
 
   List<Map<String, dynamic>> _businesses = [];
   List<Map<String, dynamic>> _specialists = [];
+  List<Map<String, dynamic>> _services = [];
   List<Map<String, dynamic>> _appointments = [];
 
   int? _selectedBusinessId;
@@ -50,6 +54,9 @@ class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
     );
     _specialistsRepository = SpecialistsRepository(
       specialistsApi: SpecialistsApi(apiClient),
+    );
+    _servicesRepository = ServicesRepository(
+      servicesApi: ServicesApi(apiClient),
     );
     _appointmentsRepository = AppointmentsRepository(
       appointmentsApi: AppointmentsApi(apiClient),
@@ -123,11 +130,16 @@ class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
         includeInactive: true,
       );
 
+      final services = await _servicesRepository.getServices(
+        includeInactive: true,
+      );
+
       if (!mounted) return;
 
       setState(() {
         _businesses = businesses;
         _specialists = specialists;
+        _services = services;
       });
 
       await _loadAppointments();
@@ -242,6 +254,18 @@ class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
     }
 
     return 'ID: $specialistId';
+  }
+
+  String _serviceNameById(int? serviceId) {
+    if (serviceId == null) return '-';
+
+    for (final service in _services) {
+      if (service['id'] == serviceId) {
+        return service['name']?.toString() ?? 'ID $serviceId';
+      }
+    }
+
+    return 'ID $serviceId';
   }
 
   Future<void> _changeStatus({
@@ -523,7 +547,7 @@ class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
             final isActive = appointment['is_active'] as bool? ?? false;
             final businessId = appointment['business_id'] as int?;
             final specialistId = appointment['specialist_id'] as int?;
-            final serviceId = appointment['service_id']?.toString() ?? '-';
+            final serviceId = appointment['service_id'] as int?;
             final email = appointment['client_email']?.toString();
             final phone = appointment['client_phone']?.toString();
             final notes = appointment['notes']?.toString();
@@ -612,7 +636,7 @@ class _AdminAppointmentsPageState extends State<AdminAppointmentsPage> {
                     const SizedBox(height: 4),
                     Text('Specialistas: ${_specialistNameById(specialistId)}'),
                     const SizedBox(height: 4),
-                    Text('Paslaugos ID: $serviceId'),
+                    Text('Paslauga: ${_serviceNameById(serviceId)}'),
                     if (email != null && email.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text('El. paštas: $email'),
