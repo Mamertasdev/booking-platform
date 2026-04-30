@@ -80,6 +80,13 @@ def ensure_can_access_specialist(
     raise HTTPException(status_code=403, detail="Not allowed")
 
 
+def normalize_is_bookable_for_role(role: str, is_bookable: bool) -> bool:
+    if role == ROLE_ADMIN:
+        return False
+
+    return is_bookable
+
+
 @router.get("/specialists", response_model=list[SpecialistResponse])
 def get_specialists(
     business_id: int | None = Query(default=None),
@@ -164,6 +171,10 @@ def create_specialist(
         full_name=payload.full_name.strip(),
         role=role,
         is_active=True,
+        is_bookable=normalize_is_bookable_for_role(
+            role=role,
+            is_bookable=payload.is_bookable,
+        ),
     )
 
     db.add(specialist)
@@ -269,6 +280,10 @@ def update_specialist(
     specialist.full_name = payload.full_name.strip()
     specialist.role = new_role
     specialist.is_active = payload.is_active
+    specialist.is_bookable = normalize_is_bookable_for_role(
+        role=new_role,
+        is_bookable=payload.is_bookable,
+    )
 
     if payload.password is not None and payload.password.strip():
         specialist.password_hash = hash_password(payload.password.strip())
@@ -318,6 +333,7 @@ def disable_specialist(
                 )
 
     specialist.is_active = False
+    specialist.is_bookable = False
 
     db.commit()
     db.refresh(specialist)

@@ -38,6 +38,7 @@ class SpecialistCreate(BaseModel):
     password: str
     full_name: str
     role: str = "specialist"
+    is_bookable: bool = True
 
     @field_validator("username")
     @classmethod
@@ -94,6 +95,7 @@ class SpecialistUpdate(BaseModel):
     full_name: str
     role: str
     is_active: bool
+    is_bookable: bool = True
 
     @field_validator("username")
     @classmethod
@@ -158,6 +160,7 @@ class SpecialistResponse(BaseModel):
     full_name: str
     role: str
     is_active: bool
+    is_bookable: bool
     created_at: datetime
 
     class Config:

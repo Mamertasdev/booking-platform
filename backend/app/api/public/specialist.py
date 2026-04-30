@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
@@ -17,12 +17,10 @@ def get_public_specialists(
         .filter(Specialist.business_id == business_id)
         .filter(Specialist.role.in_(["owner", "specialist"]))
         .filter(Specialist.is_active == True)
+        .filter(Specialist.is_bookable == True)
         .order_by(Specialist.full_name.asc())
         .all()
     )
-
-    if not specialists:
-        return []
 
     return [
         {
